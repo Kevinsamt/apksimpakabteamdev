@@ -100,12 +100,14 @@ class _StudentProfileScreenState extends State<StudentProfileScreen> {
         updatedAvatarUrl = _supabase.storage.from('avatars').getPublicUrl(filePath);
       }
 
-      await _supabase.from('profiles').update({
+      final updateData = {
         'full_name': _nameController.text.trim(),
         'nim': _nimController.text.trim().isEmpty ? null : _nimController.text.trim(),
         'kelas': _kelasController.text.trim().isEmpty ? null : _kelasController.text.trim(),
-        if (updatedAvatarUrl != null) 'avatar_url': updatedAvatarUrl,
-      }).eq('id', userId);
+      };
+      if (updatedAvatarUrl != null) updateData['avatar_url'] = updatedAvatarUrl;
+
+      await _supabase.from('profiles').update(updateData).eq('id', userId);
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profil berhasil diperbarui!'), backgroundColor: AppColors.statusActive));

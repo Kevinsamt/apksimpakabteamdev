@@ -32,7 +32,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     try {
       await Supabase.instance.client.auth.signUp(
         email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
+        password: _passwordController.text,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -116,10 +116,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     children: [
                       Center(
                         child: Image.asset(
-                          'assets/images/logo.png',
-                          height: 80,
+                          'assets/images/logo_student.png',
+                          height: 100,
                           errorBuilder: (context, error, stackTrace) =>
-                              const Icon(Icons.person_add_alt_1, size: 60, color: AppColors.primaryPink),
+                              const Icon(Icons.monitor_heart, size: 80, color: AppColors.primaryPink),
                         ),
                       ),
                       const SizedBox(height: 24),

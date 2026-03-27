@@ -23,7 +23,7 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       await Supabase.instance.client.auth.signInWithPassword(
         email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
+        password: _passwordController.text,
       );
       // Navigation is handled by AuthGate
     } on AuthException catch (e) {
@@ -97,7 +97,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     children: [
                       Center(
                         child: Image.asset(
-                          'assets/images/logo.png',
+                          'assets/images/logo_student.png',
                           height: 100,
                           errorBuilder: (context, error, stackTrace) =>
                               const Icon(Icons.monitor_heart, size: 80, color: AppColors.primaryPink),

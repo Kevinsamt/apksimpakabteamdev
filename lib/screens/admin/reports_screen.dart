@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:simpakab/services/pdf_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/text_styles.dart';
 import '../../widgets/sidebar.dart';
@@ -157,11 +158,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                 children: [
                                   Text('Reports & Analytics', style: AppTextStyles.heading1),
                                   ElevatedButton.icon(
-                                    onPressed: () {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                         const SnackBar(content: Text('Fitur Ekspor PDF sedang dalam pengembangan!'))
-                                      );
-                                    },
+                                    onPressed: () => PdfService.generateReportsPdf(
+                                      context: context,
+                                      totalEquipments: totalEquipments,
+                                      availableEquipments: availableEquipments,
+                                      activeLoans: activeLoansCount,
+                                      overdueLoans: overdueLoansCount,
+                                      summaryText: 'Aplikasi saat ini menunjukkan pemanfaatan peralatan yang sangat baik. Semua peralatan yang tercatat masih bisa didistribusikan ke mahasiswa kebidanan (Bidan) dengan baik. Laporan bulanan detail akan digenerasi di akhir bulan.',
+                                    ),
                                     icon: const Icon(Icons.download),
                                     label: const Text('Export to PDF'),
                                     style: ElevatedButton.styleFrom(

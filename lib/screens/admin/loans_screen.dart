@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../widgets/custom_loader.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/text_styles.dart';
 import '../../widgets/sidebar.dart';
 import '../../widgets/header.dart';
 import '../../widgets/app_bottom_nav.dart';
+import '../student/formal_form_view.dart';
 
 class LoansScreen extends StatefulWidget {
   const LoansScreen({super.key});
@@ -17,6 +19,7 @@ class _LoansScreenState extends State<LoansScreen> {
   final _supabase = Supabase.instance.client;
   List<Map<String, dynamic>> _loans = [];
   bool _isLoading = true;
+  bool _showHistory = false;
 
   @override
   void initState() {
@@ -31,7 +34,7 @@ class _LoansScreenState extends State<LoansScreen> {
           .from('loans')
           .select('''
             *,
-            profiles(full_name),
+            profiles(full_name, nim, kelas),
             equipments(name, sku)
           ''')
           .order('borrow_date', ascending: false);
@@ -71,7 +74,14 @@ class _LoansScreenState extends State<LoansScreen> {
         await _supabase.from('equipments').update({'available_quantity': currentQty}).eq('id', equipmentId);
       }
 
-      await _supabase.from('loans').update({'status': newStatus}).eq('id', id);
+      if (newStatus == 'returned') {
+        await _supabase.from('loans').update({
+          'status': newStatus,
+          'return_date': DateTime.now().toIso8601String(),
+        }).eq('id', id);
+      } else {
+        await _supabase.from('loans').update({'status': newStatus}).eq('id', id);
+      }
       _fetchLoans();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -85,6 +95,44 @@ class _LoansScreenState extends State<LoansScreen> {
         );
       }
     }
+  }
+
+  Widget _buildToggleButton(String label, bool isActive, VoidCallback onTap) {
+    return ElevatedButton(
+      onPressed: onTap,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: isActive ? AppColors.primaryPink : AppColors.surfaceWhite,
+        foregroundColor: isActive ? Colors.white : AppColors.textPrimary,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: isActive ? AppColors.primaryPink : AppColors.borderLight),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      ),
+      child: Text(label),
+    );
+  }
+
+  String _formatTime(String? dateStr) {
+    if (dateStr == null) return '-';
+    try {
+      final date = DateTime.parse(dateStr).toLocal();
+      return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    } catch (e) {
+      return '-';
+    }
+  }
+
+  String _parseFromNotes(String? notes, String key) {
+    if (notes == null || notes.isEmpty) return '-';
+    final parts = notes.split(', ');
+    for (var part in parts) {
+      if (part.startsWith('$key:')) {
+        return part.replaceFirst('$key: ', '');
+      }
+    }
+    return '-';
   }
 
   Future<void> _deleteLoan(Map<String, dynamic> loan) async {
@@ -123,7 +171,17 @@ class _LoansScreenState extends State<LoansScreen> {
     final borrowerName = loan['profiles']?['full_name'] ?? 'Unknown';
     final equipName = loan['equipments']?['name'] ?? 'Unknown';
     final sku = loan['equipments']?['sku'] ?? '-';
-    
+    String tglPinjam = '-';
+    String tglPraktik = '-';
+    final String notes = loan['notes'] ?? '';
+    if (notes.contains('Tgl Pinjam:')) {
+      final parts = notes.split(', ');
+      for (var part in parts) {
+        if (part.startsWith('Tgl Pinjam:')) tglPinjam = part.replaceFirst('Tgl Pinjam: ', '');
+        if (part.startsWith('Tgl Praktik:')) tglPraktik = part.replaceFirst('Tgl Praktik: ', '');
+      }
+    }
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -137,9 +195,9 @@ class _LoansScreenState extends State<LoansScreen> {
             const SizedBox(height: 8),
             Text('Barang: $equipName (SKU: $sku)', style: AppTextStyles.bodyText),
             const SizedBox(height: 8),
-            Text('Tanggal Pinjam: ${_formatDate(loan['borrow_date'])}', style: AppTextStyles.bodyText),
+            Text('Tanggal Pinjam: ${tglPinjam != '-' ? tglPinjam : _formatDate(loan['borrow_date'])}', style: AppTextStyles.bodyText),
             const SizedBox(height: 8),
-            Text('Tanggal Kembali: ${loan['return_date'] != null ? _formatDate(loan['return_date']) : 'Belum/Tidak Terjadwal'}', style: AppTextStyles.bodyText),
+            Text('Tanggal Praktik: $tglPraktik', style: AppTextStyles.bodyText),
             const SizedBox(height: 8),
             Text('Status: ${loan['status'].toString().toUpperCase()}', style: AppTextStyles.bodyText.copyWith(color: _getStatusColor(loan['status'] ?? ''))),
           ],
@@ -189,17 +247,27 @@ class _LoansScreenState extends State<LoansScreen> {
                 ),
                 Expanded(
                   child: _isLoading
-                      ? const Center(child: CircularProgressIndicator(color: AppColors.primaryPink))
+                      ? const CustomLoader(message: 'Memuat data peminjaman...')
                       : SingleChildScrollView(
                           padding: EdgeInsets.all(isDesktop ? 24.0 : 16.0),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              Wrap(
+                                alignment: WrapAlignment.spaceBetween,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                spacing: 16,
+                                runSpacing: 12,
                                 children: [
-                                  Text('Active Loans & Approvals', style: AppTextStyles.heading1),
-                                  // Nanti bisa ditambahkan tombol "Manual Loan" jika admin mau input sendiri
+                                  Text(_showHistory ? 'History Peminjaman' : 'Active Loans & Approvals', style: AppTextStyles.heading1),
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _buildToggleButton('Aktif', !_showHistory, () => setState(() => _showHistory = false)),
+                                      const SizedBox(width: 8),
+                                      _buildToggleButton('Riwayat', _showHistory, () => setState(() => _showHistory = true)),
+                                    ],
+                                  ),
                                 ],
                               ),
                               const SizedBox(height: 24),
@@ -211,23 +279,36 @@ class _LoansScreenState extends State<LoansScreen> {
                                   borderRadius: BorderRadius.circular(16),
                                   border: Border.all(color: AppColors.borderLight),
                                 ),
-                                child: _loans.isEmpty
-                                  ? const Center(child: Padding(
-                                      padding: EdgeInsets.all(32.0),
-                                      child: Text('Belum ada peminjaman alat.', style: TextStyle(color: AppColors.textSecondary)),
-                                    ))
-                                  : SingleChildScrollView(
+                                child: Builder(
+                                  builder: (context) {
+                                    final filteredLoans = _loans.where((loan) {
+                                      final status = loan['status'] ?? 'pending';
+                                      return _showHistory ? status == 'returned' : status != 'returned';
+                                    }).toList();
+
+                                    if (filteredLoans.isEmpty) {
+                                      return Center(child: Padding(
+                                        padding: const EdgeInsets.all(32.0),
+                                        child: Text(_showHistory ? 'Belum ada riwayat pengembalian.' : 'Belum ada peminjaman aktif.', style: const TextStyle(color: AppColors.textSecondary)),
+                                      ));
+                                    }
+
+                                    return SingleChildScrollView(
                                       scrollDirection: Axis.horizontal,
                                       child: DataTable(
                                           headingTextStyle: AppTextStyles.bodyTextStrong,
-                                          columns: const [
-                                            DataColumn(label: Text('Nama Alat')),
-                                            DataColumn(label: Text('Peminjam')),
-                                            DataColumn(label: Text('Tgl Pinjam')),
-                                            DataColumn(label: Text('Status')),
-                                            DataColumn(label: Text('Aksi')),
+                                          columns: [
+                                            const DataColumn(label: Text('Nama Alat')),
+                                            const DataColumn(label: Text('Peminjam')),
+                                            const DataColumn(label: Text('Tgl Pinjam')),
+                                            if (!_showHistory) const DataColumn(label: Text('Tgl Praktik')),
+                                            if (!_showHistory) const DataColumn(label: Text('Jam Ambil')),
+                                            if (_showHistory) const DataColumn(label: Text('Tgl Kembali')),
+                                            if (_showHistory) const DataColumn(label: Text('Jam Kembali')),
+                                            const DataColumn(label: Text('Status')),
+                                            const DataColumn(label: Text('Aksi')),
                                           ],
-                                          rows: _loans.map((loan) {
+                                          rows: filteredLoans.map((loan) {
                                             final status = loan['status'] ?? 'pending';
                                             final ekipName = loan['equipments']?['name'] ?? 'Barang Dihapus';
                                             
@@ -241,6 +322,10 @@ class _LoansScreenState extends State<LoansScreen> {
                                               DataCell(Text(ekipName, style: AppTextStyles.bodyText)),
                                               DataCell(Text(borrowerName, style: AppTextStyles.bodyText)),
                                               DataCell(Text(_formatDate(loan['borrow_date']), style: AppTextStyles.bodyText)),
+                                              if (!_showHistory) DataCell(Text(_parseFromNotes(loan['notes'], 'Tgl Praktik'), style: AppTextStyles.bodyText)),
+                                              if (!_showHistory) DataCell(Text(_parseFromNotes(loan['notes'], 'Pukul'), style: AppTextStyles.bodyText)),
+                                              if (_showHistory) DataCell(Text(_formatDate(loan['return_date']), style: AppTextStyles.bodyText)),
+                                              if (_showHistory) DataCell(Text(_formatTime(loan['return_date']), style: AppTextStyles.bodyText)),
                                               DataCell(
                                                 Container(
                                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -284,17 +369,36 @@ class _LoansScreenState extends State<LoansScreen> {
                                                       onPressed: () => _showLoanDetails(loan),
                                                     ),
                                                     IconButton(
+                                                      tooltip: 'Lihat Formulir Formal',
+                                                      icon: const Icon(Icons.description_outlined, color: AppColors.primaryPink, size: 20),
+                                                      onPressed: () {
+                                                        Navigator.push(
+                                                          context,
+                                                          MaterialPageRoute(
+                                                            builder: (context) => FormalFormView(
+                                                              loanData: loan,
+                                                              studentName: loan['profiles']?['full_name'] ?? 'Unknown',
+                                                              nim: loan['profiles']?['nim'] ?? '-',
+                                                              kelas: loan['profiles']?['kelas'] ?? '-',
+                                                            ),
+                                                          ),
+                                                        );
+                                                      },
+                                                    ),
+                                                    IconButton(
                                                       tooltip: 'Hapus Riwayat',
                                                       icon: const Icon(Icons.delete, color: AppColors.statusOverdue, size: 20),
                                                       onPressed: () => _deleteLoan(loan),
                                                     ),
                                                   ],
-                                                )
+                                                ),
                                               ),
                                             ]);
                                           }).toList(),
                                       ),
-                                    ),
+                                    );
+                                  },
+                                ),
                               ),
                             ],
                           ),

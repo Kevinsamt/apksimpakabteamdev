@@ -1,10 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../widgets/custom_loader.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/text_styles.dart';
 import '../../widgets/sidebar.dart';
 import '../../widgets/header.dart';
 import '../../widgets/app_bottom_nav.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:typed_data';
+
 
 class EquipmentScreen extends StatefulWidget {
   const EquipmentScreen({super.key});
@@ -17,6 +25,18 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
   final _supabase = Supabase.instance.client;
   List<Map<String, dynamic>> _equipments = [];
   bool _isLoading = true;
+
+  final List<String> _categories = [
+    'ALAT LOGAM METAL',
+    'BARANG STANLESS DAN NON STANLESS',
+    'BAHAN TENUN',
+    'BAHAN HABIS PAKAI',
+    'PHANTOM (P.)',
+    'BARANG LABORATORIUM KOMPLEMENTE',
+  ];
+  String _selectedCategory = 'Semua Kategori';
+  String _searchQuery = '';
+  final _searchController = TextEditingController();
 
   @override
   void initState() {
@@ -45,8 +65,26 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
   Future<void> _showAddEquipmentDialog() async {
     final nameController = TextEditingController();
     final skuController = TextEditingController();
-    final qtyController = TextEditingController();
+    final goodQtyController = TextEditingController();
+    final brokenQtyController = TextEditingController();
+    final descriptionController = TextEditingController(); 
+    String? selectedCategory = _categories.first;
+    XFile? selectedImage;
+    Uint8List? selectedImageBytes;
     bool isSubmitting = false;
+
+    Future<void> pickImage(void Function(void Function()) setStateDialog) async {
+      final picker = ImagePicker();
+      final image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
+      if (image != null) {
+        final bytes = await image.readAsBytes();
+        setStateDialog(() {
+          selectedImage = image;
+          selectedImageBytes = bytes;
+        });
+      }
+    }
+
 
     final result = await showDialog<bool>(
       context: context,
@@ -70,12 +108,92 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
                       controller: skuController,
                       decoration: const InputDecoration(labelText: 'Kode/SKU (Opsional)'),
                     ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: qtyController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Jumlah Total'),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedCategory,
+                      decoration: const InputDecoration(labelText: 'Kategori'),
+                      items: _categories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat, style: const TextStyle(fontSize: 12)))).toList(),
+                      onChanged: (val) => setStateDialog(() => selectedCategory = val),
                     ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: goodQtyController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(labelText: 'Kondisi Bagus'),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: TextField(
+                            controller: brokenQtyController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(labelText: 'Kondisi Rusak'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: descriptionController,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        labelText: 'Deskripsi / Fungsi Alat',
+                        hintText: 'Jelaskan kegunaan alat ini...',
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Image Picker UI
+                    const Text('Foto Alat (Opsional)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
+                    const SizedBox(height: 8),
+                    GestureDetector(
+                      onTap: () => pickImage(setStateDialog),
+                      child: Container(
+                        width: double.infinity,
+                        height: 120,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[100],
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.borderLight),
+                        ),
+                        child: selectedImageBytes != null
+                            ? Stack(
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Image.memory(selectedImageBytes!, width: double.infinity, height: 120, fit: BoxFit.cover),
+                                  ),
+                                  Positioned(
+                                    right: 4,
+                                    top: 4,
+                                    child: CircleAvatar(
+                                      backgroundColor: Colors.black54,
+                                      radius: 14,
+                                      child: IconButton(
+                                        padding: EdgeInsets.zero,
+                                        icon: const Icon(Icons.close, size: 16, color: Colors.white),
+                                        onPressed: () => setStateDialog(() {
+                                          selectedImage = null;
+                                          selectedImageBytes = null;
+                                        }),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(Icons.add_a_photo_outlined, color: AppColors.primaryPink, size: 32),
+                                  const SizedBox(height: 4),
+                                  const Text('Ketuk untuk pilih foto', style: TextStyle(fontSize: 10, color: AppColors.primaryPink)),
+                                ],
+                              ),
+                      ),
+                    ),
+
                   ],
                 ),
               ),
@@ -86,21 +204,41 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
                 ),
                 ElevatedButton(
                   onPressed: isSubmitting ? null : () async {
-                    if (nameController.text.isEmpty || qtyController.text.isEmpty) {
+                    if (nameController.text.isEmpty) {
                        ScaffoldMessenger.of(context).showSnackBar(
-                         const SnackBar(content: Text('Nama dan Jumlah wajib diisi'), backgroundColor: AppColors.statusOverdue),
+                         const SnackBar(content: Text('Nama barang wajib diisi'), backgroundColor: AppColors.statusOverdue),
                        );
                        return;
                     }
                     setStateDialog(() => isSubmitting = true);
                     try {
-                      final qty = int.parse(qtyController.text);
+                      final goodQty = int.tryParse(goodQtyController.text) ?? 0;
+                      final brokenQty = int.tryParse(brokenQtyController.text) ?? 0;
+                      final totalQty = goodQty + brokenQty;
+
+                      String? imageUrl;
+                      if (selectedImage != null && selectedImageBytes != null) {
+                        final fileName = 'equip_${DateTime.now().millisecondsSinceEpoch}.jpg';
+                        await _supabase.storage.from('equipment_images').uploadBinary(
+                          fileName,
+                          selectedImageBytes!,
+                          fileOptions: const FileOptions(contentType: 'image/jpeg'),
+                        );
+                        imageUrl = _supabase.storage.from('equipment_images').getPublicUrl(fileName);
+                      }
+
                       await _supabase.from('equipments').insert({
                         'name': nameController.text.trim(),
                         'sku': skuController.text.trim().isEmpty ? null : skuController.text.trim(),
-                        'total_quantity': qty,
-                        'available_quantity': qty,
+                        'category': selectedCategory,
+                        'good_condition': goodQty,
+                        'broken_condition': brokenQty,
+                        'total_quantity': totalQty,
+                        'available_quantity': goodQty,
+                        'description': descriptionController.text.trim(), 
+                        'image_url': imageUrl,
                       });
+
                       if (!context.mounted) return;
                       Navigator.pop(context, true);
                     } catch (e) {
@@ -165,8 +303,26 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
   Future<void> _showEditEquipmentDialog(Map<String, dynamic> item) async {
     final nameController = TextEditingController(text: item['name']);
     final skuController = TextEditingController(text: item['sku'] ?? '');
-    final qtyController = TextEditingController(text: item['total_quantity'].toString());
+    final goodQtyController = TextEditingController(text: (item['good_condition'] ?? item['total_quantity']).toString());
+    final brokenQtyController = TextEditingController(text: (item['broken_condition'] ?? 0).toString());
+    final descriptionController = TextEditingController(text: item['description'] ?? ''); 
+    String? selectedCategory = item['category'] ?? _categories.first;
+    XFile? selectedImage;
+    Uint8List? selectedImageBytes;
     bool isSubmitting = false;
+
+    Future<void> pickImage(void Function(void Function()) setStateDialog) async {
+      final picker = ImagePicker();
+      final image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
+      if (image != null) {
+        final bytes = await image.readAsBytes();
+        setStateDialog(() {
+          selectedImage = image;
+          selectedImageBytes = bytes;
+        });
+      }
+    }
+
 
     final result = await showDialog(
       context: context,
@@ -190,12 +346,96 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
                       controller: skuController,
                       decoration: const InputDecoration(labelText: 'Kode/SKU (Opsional)'),
                     ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: qtyController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Jumlah Total'),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedCategory,
+                      decoration: const InputDecoration(labelText: 'Kategori'),
+                      items: _categories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat, style: const TextStyle(fontSize: 12)))).toList(),
+                      onChanged: (val) => setStateDialog(() => selectedCategory = val),
                     ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: goodQtyController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(labelText: 'Kondisi Bagus'),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: TextField(
+                            controller: brokenQtyController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(labelText: 'Kondisi Rusak'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: descriptionController,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        labelText: 'Deskripsi / Fungsi Alat',
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Image Picker UI for Edit
+                    const Text('Foto Alat (Biarkan jika tidak diubah)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
+                    const SizedBox(height: 8),
+                    GestureDetector(
+                      onTap: () => pickImage(setStateDialog),
+                      child: Container(
+                        width: double.infinity,
+                        height: 120,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[100],
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.borderLight),
+                        ),
+                        child: selectedImageBytes != null
+                            ? Stack(
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Image.memory(selectedImageBytes!, width: double.infinity, height: 120, fit: BoxFit.cover),
+                                  ),
+                                  Positioned(
+                                    right: 4,
+                                    top: 4,
+                                    child: CircleAvatar(
+                                      backgroundColor: Colors.black54,
+                                      radius: 14,
+                                      child: IconButton(
+                                        padding: EdgeInsets.zero,
+                                        icon: const Icon(Icons.close, size: 16, color: Colors.white),
+                                        onPressed: () => setStateDialog(() {
+                                          selectedImage = null;
+                                          selectedImageBytes = null;
+                                        }),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : (item['image_url'] != null
+                                ? ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Image.network(item['image_url'], width: double.infinity, height: 120, fit: BoxFit.cover),
+                                  )
+                                : Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      const Icon(Icons.add_a_photo_outlined, color: AppColors.primaryPink, size: 32),
+                                      const SizedBox(height: 4),
+                                      const Text('Ganti foto', style: TextStyle(fontSize: 10, color: AppColors.primaryPink)),
+                                    ],
+                                  )),
+                      ),
+                    ),
+
                   ],
                 ),
               ),
@@ -206,24 +446,45 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
                 ),
                 ElevatedButton(
                   onPressed: isSubmitting ? null : () async {
-                    if (nameController.text.isEmpty || qtyController.text.isEmpty) {
+                    if (nameController.text.isEmpty) {
                        ScaffoldMessenger.of(context).showSnackBar(
-                         const SnackBar(content: Text('Nama dan Jumlah wajib diisi'), backgroundColor: AppColors.statusOverdue),
+                         const SnackBar(content: Text('Nama barang wajib diisi'), backgroundColor: AppColors.statusOverdue),
                        );
                        return;
                     }
                     setStateDialog(() => isSubmitting = true);
                     try {
-                      final newQty = int.parse(qtyController.text);
-                      final diff = newQty - (item['total_quantity'] as int);
-                      final newAvail = (item['available_quantity'] as int) + diff;
+                      final newGood = int.tryParse(goodQtyController.text) ?? 0;
+                      final newBroken = int.tryParse(brokenQtyController.text) ?? 0;
+                      final totalQty = newGood + newBroken;
+                      
+                      // Recalculate available based on diff in good condition
+                      final diffGood = newGood - (item['good_condition'] ?? item['total_quantity'] as int);
+                      final newAvail = (item['available_quantity'] as int) + diffGood;
+
+                      String? imageUrl = item['image_url'];
+                      if (selectedImage != null && selectedImageBytes != null) {
+                        final fileName = 'equip_${DateTime.now().millisecondsSinceEpoch}.jpg';
+                        await _supabase.storage.from('equipment_images').uploadBinary(
+                          fileName,
+                          selectedImageBytes!,
+                          fileOptions: const FileOptions(contentType: 'image/jpeg'),
+                        );
+                        imageUrl = _supabase.storage.from('equipment_images').getPublicUrl(fileName);
+                      }
                       
                       await _supabase.from('equipments').update({
                         'name': nameController.text.trim(),
                         'sku': skuController.text.trim().isEmpty ? null : skuController.text.trim(),
-                        'total_quantity': newQty,
+                        'category': selectedCategory,
+                        'good_condition': newGood,
+                        'broken_condition': newBroken,
+                        'total_quantity': totalQty,
                         'available_quantity': newAvail >= 0 ? newAvail : 0,
+                        'description': descriptionController.text.trim(), 
+                        'image_url': imageUrl,
                       }).eq('id', item['id']);
+
                       if (!context.mounted) return;
                       Navigator.pop(context, true);
                     } catch (e) {
@@ -237,7 +498,7 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
                   style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryPink, foregroundColor: Colors.white),
                   child: isSubmitting 
                     ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : const Text('Top Update'),
+                    : const Text('Simpan'),
                 ),
               ],
             );
@@ -255,6 +516,99 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
     }
   }
 
+  Future<void> _showQrLabelDialog(Map<String, dynamic> item) async {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppColors.surfaceWhite,
+          title: Text('QR Label: ${item['name']}', style: AppTextStyles.heading2),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.borderLight),
+                  ),
+                  child: Column(
+                    children: [
+                      Text('SIMPAKAB - LAB', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryPink, fontSize: 10)),
+                      const SizedBox(height: 8),
+                      QrImageView(
+                        data: item['id'].toString(),
+                        version: QrVersions.auto,
+                        size: 180.0,
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        height: 10,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Colors.yellow, Colors.black, Colors.yellow, Colors.black, Colors.yellow],
+                            stops: [0.0, 0.25, 0.5, 0.75, 1.0],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            tileMode: TileMode.repeated,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(item['name'], textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      Text(item['category'] ?? '-', style: const TextStyle(fontSize: 8, color: AppColors.textSecondary)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text('Print label ini untuk ditempelkan pada alat fisik.', style: TextStyle(fontSize: 10, fontStyle: FontStyle.italic)),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Tutup')),
+            ElevatedButton.icon(
+              onPressed: () async {
+                final pdf = pw.Document();
+                pdf.addPage(
+                  pw.Page(
+                    pageFormat: PdfPageFormat.roll80,
+                    build: (pw.Context context) {
+                      return pw.Center(
+                        child: pw.Column(
+                          mainAxisSize: pw.MainAxisSize.min,
+                          children: [
+                            pw.Text('SIMPAKAB - LAB', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8)),
+                            pw.BarcodeWidget(
+                              data: item['id'].toString(),
+                              barcode: pw.Barcode.qrCode(),
+                              width: 60,
+                              height: 60,
+                            ),
+                            pw.SizedBox(height: 4),
+                            pw.Text(item['name'], textAlign: pw.TextAlign.center, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                );
+                await Printing.layoutPdf(onLayout: (format) async => pdf.save());
+              },
+              icon: const Icon(Icons.print),
+              label: const Text('Print Label'),
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryPink, foregroundColor: Colors.white),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDesktop = MediaQuery.of(context).size.width >= 900;
@@ -269,73 +623,128 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
           Expanded(
             child: Column(
               children: [
-                const HeaderWidget(
-                  onMenuPressed: null,
-                ),
+                const HeaderWidget(onMenuPressed: null),
                 Expanded(
                   child: _isLoading
-                      ? const Center(child: CircularProgressIndicator(color: AppColors.primaryPink))
-                      : SingleChildScrollView(
-                          padding: EdgeInsets.all(isDesktop ? 24.0 : 16.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Wrap(
-                                alignment: WrapAlignment.spaceBetween,
-                                crossAxisAlignment: WrapCrossAlignment.center,
-                                spacing: 16,
-                                runSpacing: 16,
-                                children: [
-                                  Text('Equipment Inventory', style: AppTextStyles.heading1),
-                                  ElevatedButton.icon(
-                                    onPressed: _showAddEquipmentDialog,
-                                    icon: const Icon(Icons.add),
-                                    label: const Text('Add Equipment'),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: AppColors.statusActive,
-                                      foregroundColor: Colors.white,
-                                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                      ? const CustomLoader(message: 'Memuat data alat...')
+                      : RefreshIndicator(
+                          onRefresh: _fetchEquipments,
+                          child: SingleChildScrollView(
+                            padding: EdgeInsets.all(isDesktop ? 24.0 : 16.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Wrap(
+                                  alignment: WrapAlignment.spaceBetween,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  spacing: 16,
+                                  runSpacing: 12,
+                                  children: [
+                                    Text('Equipment Inventory', style: AppTextStyles.heading1),
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      crossAxisAlignment: WrapCrossAlignment.center,
+                                      children: [
+                                        SizedBox(
+                                          width: isDesktop ? 250 : MediaQuery.of(context).size.width * 0.4,
+                                          child: TextField(
+                                            controller: _searchController,
+                                            style: const TextStyle(fontSize: 12),
+                                            decoration: InputDecoration(
+                                              hintText: 'Cari...',
+                                              prefixIcon: const Icon(Icons.search, color: AppColors.primaryPink, size: 16),
+                                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                            ),
+                                            onChanged: (val) => setState(() => _searchQuery = val.toLowerCase()),
+                                          ),
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(10),
+                                            border: Border.all(color: AppColors.borderLight),
+                                          ),
+                                          child: DropdownButton<String>(
+                                            value: _selectedCategory,
+                                            underline: const SizedBox(),
+                                            icon: const Icon(Icons.filter_list, size: 16, color: AppColors.primaryPink),
+                                            items: ['Semua Kategori', ..._categories].map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 10)))).toList(),
+                                            onChanged: (val) => setState(() => _selectedCategory = val!),
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  )
-                                ],
-                              ),
-                              const SizedBox(height: 24),
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(20),
-                                decoration: BoxDecoration(
-                                  color: AppColors.surfaceWhite,
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(color: AppColors.borderLight),
+                                    ElevatedButton.icon(
+                                      onPressed: _showAddEquipmentDialog,
+                                      icon: const Icon(Icons.add, size: 18),
+                                      label: const Text('Add Equipment', style: TextStyle(fontSize: 12)),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppColors.statusActive,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                      ),
+                                    )
+                                  ],
                                 ),
-                                child: _equipments.isEmpty
-                                  ? const Center(child: Padding(
-                                      padding: EdgeInsets.all(32.0),
-                                      child: Text('Belum ada data barang.', style: TextStyle(color: AppColors.textSecondary)),
-                                    ))
-                                  : SingleChildScrollView(
-                                      scrollDirection: Axis.horizontal,
-                                      child: DataTable(
+                                const SizedBox(height: 24),
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(20),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.surfaceWhite,
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: AppColors.borderLight),
+                                  ),
+                                  child: _equipments.isEmpty
+                                    ? const Center(child: Padding(
+                                        padding: EdgeInsets.all(32.0),
+                                        child: Text('Belum ada data barang.', style: TextStyle(color: AppColors.textSecondary)),
+                                      ))
+                                    : SingleChildScrollView(
+                                        scrollDirection: Axis.horizontal,
+                                        child: DataTable(
                                           headingTextStyle: AppTextStyles.bodyTextStrong,
                                           columns: const [
+                                            DataColumn(label: Text('Kategori')),
                                             DataColumn(label: Text('Nama Alat')),
                                             DataColumn(label: Text('SKU')),
-                                            DataColumn(label: Text('Total Stok')),
+                                            DataColumn(label: Text('Bagus')),
+                                            DataColumn(label: Text('Rusak')),
+                                            DataColumn(label: Text('Total')),
                                             DataColumn(label: Text('Tersedia')),
                                             DataColumn(label: Text('Aksi')),
                                           ],
-                                          rows: _equipments.map((item) {
+                                          rows: _equipments.where((item) {
+                                            final name = item['name']?.toString().toLowerCase() ?? '';
+                                            final sku = item['sku']?.toString().toLowerCase() ?? '';
+                                            final cat = item['category'] ?? 'ALAT LOGAM METAL';
+                                            
+                                            final matchesSearch = name.contains(_searchQuery) || sku.contains(_searchQuery);
+                                            final matchesCat = _selectedCategory == 'Semua Kategori' || cat == _selectedCategory;
+                                            
+                                            return matchesSearch && matchesCat;
+                                          }).map((item) {
                                             return DataRow(cells: [
+                                              DataCell(Text(item['category'] ?? 'LOGAM', style: AppTextStyles.label.copyWith(color: AppColors.primaryPink))),
                                               DataCell(Text(item['name'] ?? '', style: AppTextStyles.bodyText)),
                                               DataCell(Text(item['sku'] ?? '-', style: AppTextStyles.bodyText)),
+                                              DataCell(Text((item['good_condition'] ?? item['total_quantity']).toString(), style: AppTextStyles.bodyText)),
+                                              DataCell(Text((item['broken_condition'] ?? 0).toString(), style: AppTextStyles.bodyText)),
                                               DataCell(Text(item['total_quantity'].toString(), style: AppTextStyles.bodyText)),
                                               DataCell(Text(item['available_quantity'].toString(), style: AppTextStyles.bodyText.copyWith(
-                                                color: item['available_quantity'] > 0 ? AppColors.statusActive : AppColors.statusOverdue,
+                                                color: (item['available_quantity'] ?? 0) > 0 ? AppColors.statusActive : AppColors.statusOverdue,
                                                 fontWeight: FontWeight.bold,
                                               ))),
                                               DataCell(Row(
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
+                                                  IconButton(
+                                                    icon: const Icon(Icons.qr_code, color: Colors.blueAccent, size: 20),
+                                                    onPressed: () => _showQrLabelDialog(item),
+                                                    tooltip: 'Generate QR Label',
+                                                  ),
                                                   IconButton(
                                                     icon: const Icon(Icons.edit, color: AppColors.primaryPink, size: 20),
                                                     onPressed: () => _showEditEquipmentDialog(item),
@@ -348,13 +757,13 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
                                               )),
                                             ]);
                                           }).toList(),
+                                        ),
                                       ),
-                                    ),
-                              ),
-                            ],
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-
                 ),
               ],
             ),

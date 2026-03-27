@@ -17,12 +17,11 @@ class Sidebar extends StatelessWidget {
           // Logo Area
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-            child: Image.asset(
-              'assets/images/logo.png',
-              width: double.infinity,
-              fit: BoxFit.fitWidth,
-              alignment: Alignment.center,
-            ),
+                child: Image.asset(
+                  'assets/images/logo_student.png',
+                  height: 40,
+                  errorBuilder: (c,e,s) => const Icon(Icons.monitor_heart, color: Colors.white),
+                ),
           ),
           const Divider(color: AppColors.borderLight, height: 1),
           
