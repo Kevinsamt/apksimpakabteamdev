@@ -24,3 +24,5 @@ class AppColors {
   static const Color chartGold = Color(0xFFFFB300);
   static const Color chartPeach = Color(0xFFFF7043);
 }
+
+

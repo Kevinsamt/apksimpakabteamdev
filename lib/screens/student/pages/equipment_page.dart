@@ -224,3 +224,5 @@ class _EquipmentPageState extends State<EquipmentPage> {
     );
   }
 }
+
+

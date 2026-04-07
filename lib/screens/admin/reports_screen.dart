@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:simpakab/services/pdf_service.dart';
+import '../../services/pdf_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/text_styles.dart';
 import '../../widgets/sidebar.dart';
@@ -20,6 +20,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
   int activeLoansCount = 0;
   int overdueLoansCount = 0;
   int availableEquipments = 0;
+  int brokenEquipmentsCount = 0;
+  List<Map<String, dynamic>> _brokenList = [];
 
   bool _isLoading = true;
 
@@ -36,9 +38,17 @@ class _ReportsScreenState extends State<ReportsScreen> {
       final equipments = await _supabase.from('equipments').select();
       int totalQty = 0;
       int availableQty = 0;
+      int brokenQty = 0;
+      List<Map<String, dynamic>> brokenItems = [];
+
       for (var eq in equipments) {
         totalQty += (eq['total_quantity'] as int);
         availableQty += (eq['available_quantity'] as int);
+        int itemBroken = (eq['broken_condition'] as int? ?? 0);
+        brokenQty += itemBroken;
+        if (itemBroken > 0) {
+          brokenItems.add(eq);
+        }
       }
 
       // Fetch Loans Info
@@ -57,12 +67,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
         setState(() {
           totalEquipments = totalQty;
           availableEquipments = availableQty;
+          brokenEquipmentsCount = brokenQty;
+          _brokenList = brokenItems;
           activeLoansCount = active;
           overdueLoansCount = overdue;
           _isLoading = false;
         });
       }
     } catch (e) {
+      debugPrint('Error fetching stats: $e');
       if (mounted) {
         setState(() => _isLoading = false);
       }
@@ -110,7 +123,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   child: Text(
                     value,
                     style: AppTextStyles.heading1.copyWith(
-                      color: AppColors.primaryPink,
+                      color: color == AppColors.statusOverdue ? AppColors.statusOverdue : AppColors.primaryPink,
                       fontSize: 20,
                     ),
                     maxLines: 1,
@@ -177,19 +190,94 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                 ],
                               ),
                               const SizedBox(height: 24),
-                              GridView.count(
-                                crossAxisCount: isDesktop ? 4 : 2,
-                                childAspectRatio: isDesktop ? 2.2 : 1.5,
-                                crossAxisSpacing: 16,
-                                mainAxisSpacing: 16,
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
+                              Wrap(
+                                spacing: 16,
+                                runSpacing: 16,
                                 children: [
-                                  _buildStatCard('Total Inventaris', totalEquipments.toString(), AppColors.statusPending, Icons.inventory),
-                                  _buildStatCard('Alat Tersedia', availableEquipments.toString(), AppColors.statusActive, Icons.check_circle_outline),
-                                  _buildStatCard('Pinjaman Aktif', activeLoansCount.toString(), AppColors.lightPink, Icons.card_travel),
-                                  _buildStatCard('Pinjaman Terlambat', overdueLoansCount.toString(), AppColors.statusOverdue, Icons.warning_amber),
+                                  SizedBox(width: isDesktop ? 220 : MediaQuery.of(context).size.width * 0.44, child: _buildStatCard('Total Inventaris', totalEquipments.toString(), AppColors.statusPending, Icons.inventory)),
+                                  SizedBox(width: isDesktop ? 220 : MediaQuery.of(context).size.width * 0.44, child: _buildStatCard('Alat Bagus', availableEquipments.toString(), AppColors.statusActive, Icons.check_circle_outline)),
+                                  SizedBox(width: isDesktop ? 220 : MediaQuery.of(context).size.width * 0.44, child: _buildStatCard('Alat Rusak', brokenEquipmentsCount.toString(), AppColors.statusOverdue, Icons.report_problem)),
+                                  SizedBox(width: isDesktop ? 220 : MediaQuery.of(context).size.width * 0.44, child: _buildStatCard('Pinjaman Aktif', activeLoansCount.toString(), AppColors.lightPink, Icons.card_travel)),
+                                  SizedBox(width: isDesktop ? 220 : MediaQuery.of(context).size.width * 0.44, child: _buildStatCard('Pinjaman Terlambat', overdueLoansCount.toString(), AppColors.statusOverdue, Icons.warning_amber)),
                                 ],
+                              ),
+                              const SizedBox(height: 24),
+                              // Section for Broken Items
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(24),
+                                decoration: BoxDecoration(
+                                  color: AppColors.surfaceWhite,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: AppColors.borderLight),
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      Colors.white,
+                                      AppColors.statusOverdue.withValues(alpha: 0.02),
+                                    ],
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.warning_amber_rounded, color: AppColors.statusOverdue),
+                                        const SizedBox(width: 12),
+                                        Text('Daftar Kerusakan Alat', style: AppTextStyles.heading2.copyWith(color: AppColors.statusOverdue)),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 16),
+                                    if (_brokenList.isEmpty)
+                                      const Text('Semua alat dalam kondisi baik. Tidak ada kerusakan yang dilaporkan.', style: TextStyle(color: AppColors.textSecondary))
+                                    else
+                                      Column(
+                                        children: _brokenList.map((item) => Padding(
+                                          padding: const EdgeInsets.only(bottom: 12),
+                                          child: Container(
+                                            padding: const EdgeInsets.all(12),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white,
+                                              borderRadius: BorderRadius.circular(12),
+                                              border: Border.all(color: AppColors.statusOverdue.withValues(alpha: 0.1)),
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                const CircleAvatar(
+                                                  radius: 18,
+                                                  backgroundColor: AppColors.statusOverdue,
+                                                  child: Icon(Icons.handyman, size: 16, color: Colors.white),
+                                                ),
+                                                const SizedBox(width: 12),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                                      Text('Kategori: ${item['category']}', style: const TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+                                                    ],
+                                                  ),
+                                                ),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                                  decoration: BoxDecoration(
+                                                    color: AppColors.statusOverdue.withValues(alpha: 0.1),
+                                                    borderRadius: BorderRadius.circular(8),
+                                                  ),
+                                                  child: Text(
+                                                    '${item['broken_condition']} Unit',
+                                                    style: const TextStyle(color: AppColors.statusOverdue, fontWeight: FontWeight.bold, fontSize: 12),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        )).toList(),
+                                      ),
+                                  ],
+                                ),
                               ),
                               const SizedBox(height: 24),
                               Container(
@@ -205,9 +293,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                   children: [
                                     Text('Ringkasan Laporan Bulan Ini', style: AppTextStyles.heading2),
                                     const SizedBox(height: 16),
-                                    const Text(
-                                      'Aplikasi saat ini menunjukkan pemanfaatan peralatan yang sangat baik. Semua peralatan yang tercatat masih bisa didistribusikan ke mahasiswa kebidanan (Bidan) dengan baik. Laporan bulanan detail akan digenerasi di akhir bulan.',
-                                      style: TextStyle(color: AppColors.textSecondary, height: 1.5),
+                                    Text(
+                                      brokenEquipmentsCount > 0 
+                                          ? 'Terdapat $brokenEquipmentsCount unit alat yang mengalami kerusakan. Mohon segera melakukan pengecekan atau perbaikan agar ketersediaan alat tetap terjaga.'
+                                          : 'Aplikasi saat ini menunjukkan pemanfaatan peralatan yang sangat baik. Semua peralatan yang tercatat masih bisa didistribusikan ke mahasiswa kebidanan (Bidan) dengan baik.',
+                                      style: const TextStyle(color: AppColors.textSecondary, height: 1.5),
                                     ),
                                   ],
                                 ),
@@ -224,3 +314,5 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 }
+
+

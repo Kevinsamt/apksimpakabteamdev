@@ -7,6 +7,7 @@ import '../../widgets/sidebar.dart';
 import '../../widgets/header.dart';
 import '../../widgets/app_bottom_nav.dart';
 import '../student/formal_form_view.dart';
+import '../../services/notification_service.dart';
 
 class LoansScreen extends StatefulWidget {
   const LoansScreen({super.key});
@@ -57,20 +58,14 @@ class _LoansScreenState extends State<LoansScreen> {
   Future<void> _updateStatus(String id, String newStatus, String equipmentId) async {
     try {
       if (newStatus == 'approved' || newStatus == 'returned') {
-        // Fetch current equipment
         final eqData = await _supabase.from('equipments').select('available_quantity').eq('id', equipmentId).single();
         int currentQty = eqData['available_quantity'] as int;
-
         if (newStatus == 'approved') {
-          if (currentQty <= 0) {
-             throw 'Stok barang habis!';
-          }
+          if (currentQty <= 0) throw 'Stok barang habis!';
           currentQty -= 1;
         } else if (newStatus == 'returned') {
           currentQty += 1;
         }
-
-        // Update equipment stock
         await _supabase.from('equipments').update({'available_quantity': currentQty}).eq('id', equipmentId);
       }
 
@@ -82,6 +77,30 @@ class _LoansScreenState extends State<LoansScreen> {
       } else {
         await _supabase.from('loans').update({'status': newStatus}).eq('id', id);
       }
+
+      final loanData = await _supabase.from('loans').select('user_id, equipments(name)').eq('id', id).single();
+      final studentId = loanData['user_id'];
+      final equipName = loanData['equipments']['name'];
+
+      String title = '';
+      String message = '';
+      if (newStatus == 'approved') {
+        title = 'Peminjaman Disetujui';
+        message = 'Peminjaman alat "$equipName" telah disetujui. Silakan ambil barang di laboratorium.';
+      } else if (newStatus == 'rejected') {
+        title = 'Peminjaman Ditolak';
+        message = 'Maaf, permintaan pinjam "$equipName" ditolak oleh admin.';
+      }
+
+      if (title.isNotEmpty) {
+        await NotificationService.addNotification(
+          userId: studentId,
+          title: title,
+          message: message,
+          role: 'student',
+          type: 'loan_status',
+        );
+      }
       _fetchLoans();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -89,9 +108,9 @@ class _LoansScreenState extends State<LoansScreen> {
         );
       }
     } catch (e) {
-       if (mounted) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-           SnackBar(content: Text('Gagal mengubah status: $e'), backgroundColor: AppColors.statusOverdue),
+          SnackBar(content: Text('Gagal mengubah status: $e'), backgroundColor: AppColors.statusOverdue),
         );
       }
     }
@@ -128,8 +147,8 @@ class _LoansScreenState extends State<LoansScreen> {
     if (notes == null || notes.isEmpty) return '-';
     final parts = notes.split(', ');
     for (var part in parts) {
-      if (part.startsWith('$key:')) {
-        return part.replaceFirst('$key: ', '');
+      if (part.trim().startsWith('$key:')) {
+        return part.replaceFirst('$key:', '').trim();
       }
     }
     return '-';
@@ -175,11 +194,8 @@ class _LoansScreenState extends State<LoansScreen> {
     String tglPraktik = '-';
     final String notes = loan['notes'] ?? '';
     if (notes.contains('Tgl Pinjam:')) {
-      final parts = notes.split(', ');
-      for (var part in parts) {
-        if (part.startsWith('Tgl Pinjam:')) tglPinjam = part.replaceFirst('Tgl Pinjam: ', '');
-        if (part.startsWith('Tgl Praktik:')) tglPraktik = part.replaceFirst('Tgl Praktik: ', '');
-      }
+      tglPinjam = _parseFromNotes(notes, 'Tgl Pinjam');
+      tglPraktik = _parseFromNotes(notes, 'Tgl Praktik');
     }
 
     showDialog(
@@ -218,7 +234,8 @@ class _LoansScreenState extends State<LoansScreen> {
     return AppColors.textPrimary;
   }
 
-  String _formatDate(String isoDate) {
+  String _formatDate(String? isoDate) {
+    if (isoDate == null) return '-';
     try {
       final date = DateTime.parse(isoDate);
       final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -248,159 +265,130 @@ class _LoansScreenState extends State<LoansScreen> {
                 Expanded(
                   child: _isLoading
                       ? const CustomLoader(message: 'Memuat data peminjaman...')
-                      : SingleChildScrollView(
-                          padding: EdgeInsets.all(isDesktop ? 24.0 : 16.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Wrap(
-                                alignment: WrapAlignment.spaceBetween,
-                                crossAxisAlignment: WrapCrossAlignment.center,
-                                spacing: 16,
-                                runSpacing: 12,
-                                children: [
-                                  Text(_showHistory ? 'History Peminjaman' : 'Active Loans & Approvals', style: AppTextStyles.heading1),
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      _buildToggleButton('Aktif', !_showHistory, () => setState(() => _showHistory = false)),
-                                      const SizedBox(width: 8),
-                                      _buildToggleButton('Riwayat', _showHistory, () => setState(() => _showHistory = true)),
-                                    ],
+                      : RefreshIndicator(
+                          onRefresh: _fetchLoans,
+                          color: AppColors.primaryPink,
+                          child: SingleChildScrollView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: EdgeInsets.all(isDesktop ? 24.0 : 16.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Wrap(
+                                  alignment: WrapAlignment.spaceBetween,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  spacing: 16,
+                                  runSpacing: 12,
+                                  children: [
+                                    Text(_showHistory ? 'History Peminjaman' : 'Active Loans & Approvals', style: AppTextStyles.heading1),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        _buildToggleButton('Aktif', !_showHistory, () => setState(() => _showHistory = false)),
+                                        const SizedBox(width: 8),
+                                        _buildToggleButton('Riwayat', _showHistory, () => setState(() => _showHistory = true)),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 24),
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(20),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.surfaceWhite,
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: AppColors.borderLight),
                                   ),
-                                ],
-                              ),
-                              const SizedBox(height: 24),
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(20),
-                                decoration: BoxDecoration(
-                                  color: AppColors.surfaceWhite,
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(color: AppColors.borderLight),
-                                ),
-                                child: Builder(
-                                  builder: (context) {
-                                    final filteredLoans = _loans.where((loan) {
-                                      final status = loan['status'] ?? 'pending';
-                                      return _showHistory ? status == 'returned' : status != 'returned';
-                                    }).toList();
-
-                                    if (filteredLoans.isEmpty) {
-                                      return Center(child: Padding(
-                                        padding: const EdgeInsets.all(32.0),
-                                        child: Text(_showHistory ? 'Belum ada riwayat pengembalian.' : 'Belum ada peminjaman aktif.', style: const TextStyle(color: AppColors.textSecondary)),
-                                      ));
-                                    }
-
-                                    return SingleChildScrollView(
-                                      scrollDirection: Axis.horizontal,
-                                      child: DataTable(
-                                          headingTextStyle: AppTextStyles.bodyTextStrong,
-                                          columns: [
-                                            const DataColumn(label: Text('Nama Alat')),
-                                            const DataColumn(label: Text('Peminjam')),
-                                            const DataColumn(label: Text('Tgl Pinjam')),
-                                            if (!_showHistory) const DataColumn(label: Text('Tgl Praktik')),
-                                            if (!_showHistory) const DataColumn(label: Text('Jam Ambil')),
-                                            if (_showHistory) const DataColumn(label: Text('Tgl Kembali')),
-                                            if (_showHistory) const DataColumn(label: Text('Jam Kembali')),
-                                            const DataColumn(label: Text('Status')),
-                                            const DataColumn(label: Text('Aksi')),
-                                          ],
-                                          rows: filteredLoans.map((loan) {
-                                            final status = loan['status'] ?? 'pending';
-                                            final ekipName = loan['equipments']?['name'] ?? 'Barang Dihapus';
-                                            
-                                            // Fallback for borrower name
-                                            var borrowerName = loan['profiles']?['full_name'];
-                                            if (borrowerName == null || borrowerName.toString().trim().isEmpty) {
-                                              borrowerName = '(Nama Belum Diset)';
-                                            }
-
-                                            return DataRow(cells: [
-                                              DataCell(Text(ekipName, style: AppTextStyles.bodyText)),
-                                              DataCell(Text(borrowerName, style: AppTextStyles.bodyText)),
-                                              DataCell(Text(_formatDate(loan['borrow_date']), style: AppTextStyles.bodyText)),
-                                              if (!_showHistory) DataCell(Text(_parseFromNotes(loan['notes'], 'Tgl Praktik'), style: AppTextStyles.bodyText)),
-                                              if (!_showHistory) DataCell(Text(_parseFromNotes(loan['notes'], 'Pukul'), style: AppTextStyles.bodyText)),
-                                              if (_showHistory) DataCell(Text(_formatDate(loan['return_date']), style: AppTextStyles.bodyText)),
-                                              if (_showHistory) DataCell(Text(_formatTime(loan['return_date']), style: AppTextStyles.bodyText)),
-                                              DataCell(
-                                                Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                  decoration: BoxDecoration(
-                                                    color: _getStatusColor(status).withValues(alpha: 0.1),
-                                                    borderRadius: BorderRadius.circular(12),
-                                                    border: Border.all(color: _getStatusColor(status).withValues(alpha: 0.5)),
-                                                  ),
-                                                  child: Text(
-                                                    status.toString().toUpperCase(),
-                                                    style: AppTextStyles.label.copyWith(
-                                                      color: _getStatusColor(status),
-                                                      fontWeight: FontWeight.w700,
-                                                      fontSize: 10,
+                                  child: Builder(
+                                    builder: (context) {
+                                      final filteredLoans = _loans.where((loan) {
+                                        final status = loan['status'] ?? 'pending';
+                                        return _showHistory ? status == 'returned' : status != 'returned';
+                                      }).toList();
+ 
+                                      if (filteredLoans.isEmpty) {
+                                        return Center(child: Padding(
+                                          padding: const EdgeInsets.all(32.0),
+                                          child: Text(_showHistory ? 'Belum ada riwayat pengembalian.' : 'Belum ada peminjaman aktif.', style: const TextStyle(color: AppColors.textSecondary)),
+                                        ));
+                                      }
+ 
+                                      return SingleChildScrollView(
+                                        scrollDirection: Axis.horizontal,
+                                        child: DataTable(
+                                            headingTextStyle: AppTextStyles.bodyTextStrong,
+                                            columns: [
+                                              const DataColumn(label: Text('Nama Alat')),
+                                              const DataColumn(label: Text('Peminjam')),
+                                              const DataColumn(label: Text('Tgl Pinjam')),
+                                              if (!_showHistory) const DataColumn(label: Text('Tgl Praktik')),
+                                              if (!_showHistory) const DataColumn(label: Text('Jam Ambil')),
+                                              if (_showHistory) const DataColumn(label: Text('Tgl Kembali')),
+                                              if (_showHistory) const DataColumn(label: Text('Jam Kembali')),
+                                              const DataColumn(label: Text('Status')),
+                                              const DataColumn(label: Text('Aksi')),
+                                            ],
+                                            rows: filteredLoans.map((loan) {
+                                              final status = loan['status'] ?? 'pending';
+                                              final ekipName = loan['equipments']?['name'] ?? 'Barang Dihapus';
+                                              var borrowerName = loan['profiles']?['full_name'];
+                                              if (borrowerName == null || borrowerName.toString().trim().isEmpty) {
+                                                borrowerName = '(Nama Belum Diset)';
+                                              }
+ 
+                                              return DataRow(cells: [
+                                                DataCell(Text(ekipName, style: AppTextStyles.bodyText)),
+                                                DataCell(Text(borrowerName, style: AppTextStyles.bodyText)),
+                                                DataCell(Text(_formatDate(loan['borrow_date']), style: AppTextStyles.bodyText)),
+                                                if (!_showHistory) DataCell(Text(_parseFromNotes(loan['notes'], 'Tgl Praktik'), style: AppTextStyles.bodyText)),
+                                                if (!_showHistory) DataCell(Text(_parseFromNotes(loan['notes'], 'Pukul'), style: AppTextStyles.bodyText)),
+                                                if (_showHistory) DataCell(Text(_formatDate(loan['return_date']), style: AppTextStyles.bodyText)),
+                                                if (_showHistory) DataCell(Text(_formatTime(loan['return_date']), style: AppTextStyles.bodyText)),
+                                                DataCell(
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                    decoration: BoxDecoration(
+                                                      color: _getStatusColor(status).withValues(alpha: 0.1),
+                                                      borderRadius: BorderRadius.circular(12),
+                                                      border: Border.all(color: _getStatusColor(status).withValues(alpha: 0.5)),
+                                                    ),
+                                                    child: Text(
+                                                      status.toUpperCase(),
+                                                      style: AppTextStyles.label.copyWith(color: _getStatusColor(status), fontWeight: FontWeight.w700, fontSize: 10),
                                                     ),
                                                   ),
                                                 ),
-                                              ),
-                                              DataCell(
-                                                Row(
-                                                  mainAxisSize: MainAxisSize.min,
-                                                  children: [
-                                                    if (status == 'pending') ...[
-                                                      TextButton(
-                                                        onPressed: () => _updateStatus(loan['id'], 'approved', loan['equipment_id']),
-                                                        child: const Text('Setujui', style: TextStyle(color: AppColors.statusActive)),
+                                                DataCell(
+                                                  Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      if (status == 'pending') ...[
+                                                        TextButton(onPressed: () => _updateStatus(loan['id'], 'approved', loan['equipment_id']), child: const Text('Setujui', style: TextStyle(color: AppColors.statusActive))),
+                                                        TextButton(onPressed: () => _updateStatus(loan['id'], 'rejected', loan['equipment_id']), child: const Text('Tolak', style: TextStyle(color: AppColors.statusOverdue))),
+                                                      ] else if (status == 'approved') ...[
+                                                        TextButton(onPressed: () => _updateStatus(loan['id'], 'returned', loan['equipment_id']), child: const Text('Dikembalikan', style: TextStyle(color: AppColors.textSecondary))),
+                                                      ],
+                                                      IconButton(tooltip: 'Detail', icon: const Icon(Icons.info_outline, color: AppColors.primaryPink, size: 20), onPressed: () => _showLoanDetails(loan)),
+                                                      IconButton(
+                                                        tooltip: 'Formulir Formal',
+                                                        icon: const Icon(Icons.description_outlined, color: AppColors.primaryPink, size: 20),
+                                                        onPressed: () {
+                                                          Navigator.push(context, MaterialPageRoute(builder: (context) => FormalFormView(loanData: loan, studentName: loan['profiles']?['full_name'] ?? 'Unknown', nim: loan['profiles']?['nim'] ?? '-', kelas: loan['profiles']?['kelas'] ?? '-')));
+                                                        },
                                                       ),
-                                                      TextButton(
-                                                        onPressed: () => _updateStatus(loan['id'], 'rejected', loan['equipment_id']),
-                                                        child: const Text('Tolak', style: TextStyle(color: AppColors.statusOverdue)),
-                                                      ),
-                                                    ] else if (status == 'approved') ...[
-                                                      TextButton(
-                                                        onPressed: () => _updateStatus(loan['id'], 'returned', loan['equipment_id']),
-                                                        child: const Text('Dikembalikan', style: TextStyle(color: AppColors.textSecondary)),
-                                                      ),
+                                                      IconButton(tooltip: 'Hapus', icon: const Icon(Icons.delete_outline, color: AppColors.statusOverdue, size: 20), onPressed: () => _deleteLoan(loan)),
                                                     ],
-                                                    IconButton(
-                                                      tooltip: 'Lihat Detail',
-                                                      icon: const Icon(Icons.info_outline, color: AppColors.primaryPink, size: 20),
-                                                      onPressed: () => _showLoanDetails(loan),
-                                                    ),
-                                                    IconButton(
-                                                      tooltip: 'Lihat Formulir Formal',
-                                                      icon: const Icon(Icons.description_outlined, color: AppColors.primaryPink, size: 20),
-                                                      onPressed: () {
-                                                        Navigator.push(
-                                                          context,
-                                                          MaterialPageRoute(
-                                                            builder: (context) => FormalFormView(
-                                                              loanData: loan,
-                                                              studentName: loan['profiles']?['full_name'] ?? 'Unknown',
-                                                              nim: loan['profiles']?['nim'] ?? '-',
-                                                              kelas: loan['profiles']?['kelas'] ?? '-',
-                                                            ),
-                                                          ),
-                                                        );
-                                                      },
-                                                    ),
-                                                    IconButton(
-                                                      tooltip: 'Hapus Riwayat',
-                                                      icon: const Icon(Icons.delete, color: AppColors.statusOverdue, size: 20),
-                                                      onPressed: () => _deleteLoan(loan),
-                                                    ),
-                                                  ],
+                                                  ),
                                                 ),
-                                              ),
-                                            ]);
-                                          }).toList(),
-                                      ),
-                                    );
-                                  },
+                                              ]);
+                                            }).toList()),
+                                      );
+                                    },
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                 ),

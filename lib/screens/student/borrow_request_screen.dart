@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../theme/app_colors.dart';
+import '../../services/notification_service.dart';
 
 class BorrowRequestScreen extends StatefulWidget {
   final List<Map<String, dynamic>> items;
@@ -48,6 +49,8 @@ class _BorrowRequestScreenState extends State<BorrowRequestScreen> {
 
     if (userId == null) return;
 
+    final navigator = Navigator.of(context); // Capture navigator early
+
     try {
       final String formalNotes = 'Semester: ${_semesterController.text}, '
           'MK: ${_mataKuliahController.text}, '
@@ -64,12 +67,20 @@ class _BorrowRequestScreenState extends State<BorrowRequestScreen> {
           'status': 'pending',
           'borrow_date': _borrowDate.toIso8601String(),
           'notes': formalNotes,
+          'quantity': item['quantity'] ?? 1,
         });
       }
 
-      if (mounted) {
-        Navigator.pop(context, true); // Success
-      }
+      // Notifikasi ke Admin
+      await NotificationService.addNotification(
+        title: 'Permintaan Pinjam Baru',
+        message: '${widget.studentName} mengajukan peminjaman untuk ${widget.items.length} alat.',
+        role: 'admin',
+        type: 'loan_request',
+      );
+      
+      if (!mounted) return;
+      navigator.pop(true); // Success
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -156,8 +167,13 @@ class _BorrowRequestScreenState extends State<BorrowRequestScreen> {
                   itemBuilder: (context, index) {
                     final item = widget.items[index];
                     return ListTile(
-                      title: Text(item['name']),
+                      title: Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
                       subtitle: Text(item['category'] ?? ''),
+                      trailing: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(color: AppColors.surfacePink, borderRadius: BorderRadius.circular(12)),
+                        child: Text('${item['quantity']} Unit', style: const TextStyle(color: AppColors.primaryPink, fontWeight: FontWeight.bold, fontSize: 12)),
+                      ),
                       leading: Text('${index + 1}.'),
                     );
                   },

@@ -73,52 +73,59 @@ class _HistoryPageState extends State<HistoryPage> {
           child: Text('RIWAYAT PENGEMBALIAN', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87)),
         ),
         Expanded(
-          child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _history.isEmpty
-                  ? const Center(child: Text('Belum ada riwayat pengembalian.'))
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      itemCount: _history.length,
-                      itemBuilder: (context, index) {
-                        final loan = _history[index];
-                        final eqName = loan['equipments'] != null ? loan['equipments']['name'] : 'Unknown';
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            side: const BorderSide(color: AppColors.borderLight),
-                          ),
-                          child: ListTile(
-                            leading: CircleAvatar(
-                                  backgroundColor: AppColors.surfacePink.withValues(alpha: 0.1),
-                                  child: const Icon(Icons.history, color: AppColors.primaryPink),
+          child: RefreshIndicator(
+            onRefresh: _fetchHistory,
+            color: AppColors.primaryPink,
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _history.isEmpty
+                    ? const Center(child: Text('Belum ada riwayat pengembalian.'))
+                    : ListView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        itemCount: _history.length,
+                        itemBuilder: (context, index) {
+                          final loan = _history[index];
+                          final eqName = loan['equipments'] != null ? loan['equipments']['name'] : 'Unknown';
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              side: const BorderSide(color: AppColors.borderLight),
                             ),
-                            title: Text(eqName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                            subtitle: Text('Kembali: ${_formatDateTime(loan['return_date'])}'),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.description_outlined, color: AppColors.primaryPink),
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => FormalFormView(
-                                      loanData: loan,
-                                      studentName: widget.studentName,
-                                      nim: widget.nim,
-                                      kelas: widget.kelas,
+                            child: ListTile(
+                              leading: CircleAvatar(
+                                    backgroundColor: AppColors.surfacePink.withValues(alpha: 0.1),
+                                    child: const Icon(Icons.history, color: AppColors.primaryPink),
+                              ),
+                              title: Text(eqName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                              subtitle: Text('Kembali: ${_formatDateTime(loan['return_date'])}'),
+                              trailing: IconButton(
+                                icon: const Icon(Icons.description_outlined, color: AppColors.primaryPink),
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => FormalFormView(
+                                        loanData: loan,
+                                        studentName: widget.studentName,
+                                        nim: widget.nim,
+                                        kelas: widget.kelas,
+                                      ),
                                     ),
-                                  ),
-                                );
-                              },
+                                  );
+                                },
+                              ),
                             ),
-                          ),
-                        );
-                      },
-                    ),
+                          );
+                        },
+                      ),
+          ),
         ),
       ],
     );
   }
 }
+
+

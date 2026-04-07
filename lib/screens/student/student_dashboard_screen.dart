@@ -7,6 +7,8 @@ import 'borrow_request_screen.dart';
 import 'scanner_screen.dart';
 import 'formal_form_view.dart';
 import 'pages/history_page.dart';
+import 'ai_assistant_screen.dart';
+import '../../services/notification_service.dart';
 
 class StudentDashboardScreen extends StatefulWidget {
   const StudentDashboardScreen({super.key});
@@ -110,16 +112,50 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
     }
   }
 
+  Future<void> _refreshAll() async {
+    await Future.wait([
+      _fetchProfile(),
+      _fetchEquipments(),
+      _fetchActiveLoans(),
+    ]);
+  }
+
+  void _updateQuantity(String equipmentId, int delta, int maxStock) {
+    setState(() {
+      final index = _cart.indexWhere((item) => item['id'] == equipmentId);
+      if (index >= 0) {
+        int newQty = (_cart[index]['quantity'] ?? 1) + delta;
+        if (newQty > 0 && newQty <= maxStock) {
+          _cart[index]['quantity'] = newQty;
+        } else if (newQty <= 0) {
+          _cart.removeAt(index);
+        }
+      }
+    });
+  }
+
   void _addToCart(Map<String, dynamic> equipment) {
-    if (_cart.any((item) => item['id'] == equipment['id'])) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Alat sudah ada di daftar pinjam'), backgroundColor: Colors.orange),
-      );
+    int maxStock = equipment['available_quantity'] ?? 1;
+    final index = _cart.indexWhere((item) => item['id'] == equipment['id']);
+    
+    if (index >= 0) {
+      if (_cart[index]['quantity'] < maxStock) {
+        setState(() => _cart[index]['quantity']++);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Jumlah ${equipment['name']} bertambah jadi ${_cart[index]['quantity']}'), backgroundColor: AppColors.primaryPink, duration: const Duration(seconds: 1)),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Stok alat di laboratorium sudah maksimal'), backgroundColor: Colors.orange),
+        );
+      }
       return;
     }
+
     setState(() {
-      _cart.add(equipment);
+      _cart.add({...equipment, 'quantity': 1});
     });
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('${equipment['name']} ditambahkan ke daftar'),
@@ -171,14 +207,24 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                   : _selectedIndex == 2 
                       ? _buildPeminjaman() 
                       : _buildKembalian(),
-      floatingActionButton: _selectedIndex == 1 && _cart.isNotEmpty 
+      floatingActionButton: _selectedIndex == 0
           ? FloatingActionButton.extended(
-              onPressed: () => setState(() => _selectedIndex = 2),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const AiAssistantScreen()),
+              ),
               backgroundColor: AppColors.primaryPink,
-              icon: const Icon(Icons.shopping_basket_outlined, color: Colors.white),
-              label: Text('${_cart.length} Alat Terpilih', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              icon: const Icon(Icons.bolt_rounded, color: Colors.white),
+              label: const Text('TANYA AI', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             )
-          : null,
+          : (_selectedIndex == 1 && _cart.isNotEmpty
+              ? FloatingActionButton.extended(
+                  onPressed: () => setState(() => _selectedIndex = 2),
+                  backgroundColor: AppColors.primaryPink,
+                  icon: const Icon(Icons.shopping_basket_outlined, color: Colors.white),
+                  label: Text('${_cart.length} Alat Terpilih', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                )
+              : null),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           boxShadow: [
@@ -205,255 +251,267 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   }
 
   Widget _buildHome() {
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          // Top Header & Profile Section with Gradient
-          Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  AppColors.primaryPink,
-                  AppColors.primaryPink.withValues(alpha: 0.1),
-                  AppColors.backgroundWhite,
-                ],
-                stops: const [0.0, 0.6, 1.0],
+    return RefreshIndicator(
+      onRefresh: _refreshAll,
+      color: AppColors.primaryPink,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: Column(
+          children: [
+            Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    AppColors.primaryPink,
+                    AppColors.primaryPink.withValues(alpha: 0.1),
+                    AppColors.backgroundWhite,
+                  ],
+                  stops: const [0.0, 0.6, 1.0],
+                ),
               ),
-            ),
-            child: SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
-                child: Column(
-                  children: [
-                    // Logo and Toolbar
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        // Left side: Logo
-                        Expanded(
-                          child: Row(
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Row(
+                              children: [
+                                Image.asset('assets/images/logo_student.png', height: 42, fit: BoxFit.contain, errorBuilder: (c,e,s) => const Icon(Icons.favorite, color: Colors.white)),
+                                const SizedBox(width: 8),
+                                const Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('SIMPAKAB', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87)),
+                                      Text('sistem informasi management\n& peminjaman alat kebidanan', 
+                                        style: TextStyle(fontSize: 8, color: Colors.black54, height: 1.1),
+                                        overflow: TextOverflow.visible,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Row(
                             children: [
-                              Image.asset('assets/images/logo_student.png', height: 42, fit: BoxFit.contain, errorBuilder: (c,e,s) => const Icon(Icons.favorite, color: Colors.white)),
-                              const SizedBox(width: 8),
-                              const Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text('SIMPAKAB', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87)),
-                                    Text('sistem informasi management\n& peminjaman alat kebidanan', 
-                                      style: TextStyle(fontSize: 8, color: Colors.black54, height: 1.1),
-                                      overflow: TextOverflow.visible,
-                                    ),
-                                  ],
+                              StreamBuilder<int>(
+                                stream: NotificationService.getUnreadCountStream(_supabase.auth.currentUser?.id, role: 'student'),
+                                builder: (context, snapshot) {
+                                  final count = snapshot.data ?? 0;
+                                  return Stack(
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.notifications_none, color: Colors.white, size: 28),
+                                        onPressed: () {
+                                          showModalBottomSheet(
+                                            context: context,
+                                            shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+                                            builder: (context) => _buildNotificationSheet(),
+                                          );
+                                        },
+                                      ),
+                                      if (count > 0)
+                                        Positioned(
+                                          right: 8,
+                                          top: 8,
+                                          child: Container(
+                                            padding: const EdgeInsets.all(4),
+                                            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                                            constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                                            child: Text(
+                                              '$count',
+                                              style: const TextStyle(color: AppColors.primaryPink, fontSize: 8, fontWeight: FontWeight.bold),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  );
+                                },
+                              ),
+                              const SizedBox(width: 4),
+                              GestureDetector(
+                                onTap: () async {
+                                  final result = await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (context) => StudentProfileScreen(
+                                      initialName: _studentName,
+                                      initialNim: _nim,
+                                      initialKelas: _kelas,
+                                      initialAvatarUrl: _avatarUrl,
+                                    )),
+                                  );
+                                  if (result == true) {
+                                    _fetchProfile();
+                                  }
+                                },
+                                child: const CircleAvatar(
+                                  radius: 18,
+                                  backgroundColor: Colors.black,
+                                  child: Icon(Icons.person, color: Colors.white, size: 20),
                                 ),
                               ),
                             ],
+                          )
+                        ],
+                      ),
+                      const SizedBox(height: 32),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white,
+                              boxShadow: [
+                                BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 10, spreadRadius: 2),
+                              ]
+                            ),
+                            child: CircleAvatar(
+                              radius: 40,
+                              backgroundColor: Colors.black87,
+                              backgroundImage: _avatarUrl != null && _avatarUrl!.isNotEmpty ? NetworkImage(_avatarUrl!) : null,
+                              child: _avatarUrl == null || _avatarUrl!.isEmpty ? const Icon(Icons.person, size: 50, color: Colors.white) : null,
+                            ),
                           ),
-                        ),
-                        // Right side: Icons
-                        Row(
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.notifications_none, color: Colors.white, size: 28),
-                              onPressed: () {},
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Halo, Selamat Datang', style: TextStyle(fontSize: 14, color: Colors.black87)),
+                                const SizedBox(height: 4),
+                                _isLoading 
+                                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                                    : Text(_studentName, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black)),
+                                const SizedBox(height: 4),
+                                Text('(Nim :$_nim) Kelas: $_kelas', style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                              ],
                             ),
-                            const SizedBox(width: 4),
-                            GestureDetector(
-                              onTap: () async {
-                                final result = await Navigator.push(
-                                  context,
-                                  MaterialPageRoute(builder: (context) => StudentProfileScreen(
-                                    initialName: _studentName,
-                                    initialNim: _nim,
-                                    initialKelas: _kelas,
-                                    initialAvatarUrl: _avatarUrl,
-                                  )),
-                                );
-                                if (result == true) {
-                                  _fetchProfile();
-                                }
-                              },
-                              child: const CircleAvatar(
-                                radius: 18,
-                                backgroundColor: Colors.black,
-                                child: Icon(Icons.person, color: Colors.white, size: 20),
-                              ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: InkWell(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ScannerScreen(
+                              studentName: _studentName,
+                              nim: _nim,
+                              kelas: _kelas,
                             ),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryPink,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(color: AppColors.primaryPink.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 4)),
                           ],
-                        )
-                      ],
-                    ),
-                    const SizedBox(height: 32),
-                    // Profile Info
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.white,
-                            boxShadow: [
-                              BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 10, spreadRadius: 2),
-                            ]
-                          ),
-                          child: CircleAvatar(
-                            radius: 40,
-                            backgroundColor: Colors.black87,
-                            backgroundImage: _avatarUrl != null && _avatarUrl!.isNotEmpty ? NetworkImage(_avatarUrl!) : null,
-                            child: _avatarUrl == null || _avatarUrl!.isEmpty ? const Icon(Icons.person, size: 50, color: Colors.white) : null,
-                          ),
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Halo, Selamat Datang', style: TextStyle(fontSize: 14, color: Colors.black87)),
-                              const SizedBox(height: 4),
-                              _isLoading 
-                                  ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                                  : Text(_studentName, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black)),
-                              const SizedBox(height: 4),
-                              Text('(Nim :$_nim) Kelas: $_kelas', style: const TextStyle(fontSize: 12, color: Colors.black87)),
-                            ],
-                          ),
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.qr_code_scanner, color: Colors.white, size: 24),
+                            SizedBox(width: 12),
+                            Text('SCAN QR ALAT', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
-                    const SizedBox(height: 24),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20.0),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 16,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Peminjaman Aktif', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.black)),
+                    const SizedBox(height: 16),
+                    if (_isLoansLoading)
+                      const Center(child: CustomLoader(message: 'Memuat peminjaman aktif...'))
+                    else if (_activeLoans.isEmpty)
+                      Row(
+                        children: [
+                          Container(
+                            width: 12, height: 4,
+                            decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(2)),
+                          ),
+                          const SizedBox(width: 12),
+                          const Expanded(child: Text('Belum ada peminjaman aktif', style: TextStyle(fontSize: 14, color: Colors.black54))),
+                        ],
+                      )
+                    else
+                      ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: _activeLoans.length,
+                        itemBuilder: (context, index) {
+                          final loan = _activeLoans[index];
+                          final status = loan['status'] == 'pending' ? 'Menunggu' : 'Disetujui';
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8.0),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 8, height: 8,
+                                  decoration: BoxDecoration(color: loan['status'] == 'pending' ? AppColors.statusPending : AppColors.statusActive, shape: BoxShape.circle),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(child: Text('${loan['equipments']['name']} ($status)', style: const TextStyle(fontSize: 14, color: Colors.black87))),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
                   ],
                 ),
               ),
             ),
-          ),
-
-          // Quick Actions Row (New)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: InkWell(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ScannerScreen(
-                            studentName: _studentName,
-                            nim: _nim,
-                            kelas: _kelas,
-                          ),
-                        ),
-                      );
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryPink,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(color: AppColors.primaryPink.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 4)),
-                        ],
-                      ),
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.qr_code_scanner, color: Colors.white, size: 24),
-                          SizedBox(width: 12),
-                          Text('SCAN QR ALAT', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-          
-          // Active Loans Card
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 16,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Peminjaman Aktif', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.black)),
-                  const SizedBox(height: 16),
-                  if (_isLoansLoading)
-                    const Center(child: CustomLoader(message: 'Memuat peminjaman aktif...'))
-                  else if (_activeLoans.isEmpty)
-                    Row(
-                      children: [
-                        Container(
-                          width: 12,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: Colors.black26,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        const Expanded(
-                          child: Text('Belum ada peminjaman aktif', style: TextStyle(fontSize: 14, color: Colors.black54)),
-                        ),
-                      ],
-                    )
-                  else
-                    ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _activeLoans.length,
-                      itemBuilder: (context, index) {
-                        final loan = _activeLoans[index];
-                        final status = loan['status'] == 'pending' ? 'Menunggu' : 'Disetujui';
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 8.0),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 8,
-                                height: 8,
-                                decoration: BoxDecoration(
-                                  color: loan['status'] == 'pending' ? AppColors.statusPending : AppColors.statusActive,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  '${loan['equipments']['name']} ($status)',
-                                  style: const TextStyle(fontSize: 14, color: Colors.black87),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 32),
-        ],
+            const SizedBox(height: 32),
+          ],
+        ),
       ),
     );
   }
@@ -467,10 +525,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [
-                AppColors.primaryPink,
-                AppColors.primaryPink.withValues(alpha: 0.8),
-              ],
+              colors: [AppColors.primaryPink, AppColors.primaryPink.withValues(alpha: 0.8)],
             ),
           ),
           child: SafeArea(
@@ -481,19 +536,10 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                 children: [
                   const Icon(Icons.build_circle_outlined, color: Colors.white, size: 28),
                   const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text('Daftar Alat Peminjaman', 
-                      style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
+                  const Expanded(child: Text('Daftar Alat Peminjaman', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
                   if (!_isEquipLoading) ...[
                     const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(12)),
-                      child: Text('${_equipments.length} Item', style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold)),
-                    ),
+                    Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(12)), child: Text('${_equipments.length} Item', style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold))),
                   ],
                 ],
               ),
@@ -501,116 +547,150 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
           ),
         ),
         Expanded(
-          child: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TextField(
-                    decoration: InputDecoration(
-                      hintText: 'Cari alat atau bahan...',
-                      prefixIcon: const Icon(Icons.search, color: AppColors.primaryPink),
-                      filled: true,
-                      fillColor: Colors.white,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.borderLight)),
-                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.borderLight)),
-                    ),
-                    onChanged: (val) => setState(() => _searchQuery = val.toLowerCase()),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    height: 40,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: _categories.length,
-                      itemBuilder: (context, index) {
-                        final cat = _categories[index];
-                        final isSelected = _selectedCategory == cat;
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 8.0),
-                          child: FilterChip(
-                            label: Text(cat, style: TextStyle(fontSize: 10, color: isSelected ? Colors.white : Colors.black87, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-                            selected: isSelected,
-                            onSelected: (selected) => setState(() => _selectedCategory = cat),
-                            selectedColor: AppColors.primaryPink,
-                            checkmarkColor: Colors.white,
-                            backgroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: isSelected ? AppColors.primaryPink : AppColors.borderLight)),
+          child: RefreshIndicator(
+            onRefresh: _fetchEquipments,
+            color: AppColors.primaryPink,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            decoration: InputDecoration(
+                              hintText: 'Cari alat atau bahan...',
+                              prefixIcon: const Icon(Icons.search, color: AppColors.primaryPink),
+                              filled: true, fillColor: Colors.white,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.borderLight)),
+                              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.borderLight)),
+                            ),
+                            onChanged: (val) => setState(() => _searchQuery = val.toLowerCase()),
                           ),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  if (_isEquipLoading)
-                    const Center(child: CustomLoader(message: 'Memuat daftar alat...'))
-                  else if (_equipments.isEmpty)
-                    const Center(child: Text('Tidak ada alat tersedia saat ini.'))
-                  else
-                    ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: _equipments.where((item) {
-                        final name = item['name']?.toString().toLowerCase() ?? '';
-                        final cat = item['category'] ?? 'ALAT LOGAM METAL';
-                        final matchesSearch = name.contains(_searchQuery);
-                        final matchesCat = _selectedCategory == 'Semua' || cat == _selectedCategory;
-                        return matchesSearch && matchesCat;
-                      }).length,
-                      itemBuilder: (context, index) {
-                        final filteredList = _equipments.where((item) {
-                          final name = item['name']?.toString().toLowerCase() ?? '';
-                          final cat = item['category'] ?? 'ALAT LOGAM METAL';
-                          final matchesSearch = name.contains(_searchQuery);
-                          final matchesCat = _selectedCategory == 'Semua' || cat == _selectedCategory;
-                          return matchesSearch && matchesCat;
-                        }).toList();
-                        final equipment = filteredList[index];
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.borderLight)),
+                        ),
+                        const SizedBox(width: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(color: AppColors.surfacePink, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.primaryPink.withValues(alpha: 0.3))),
                           child: Row(
                             children: [
-                              Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(color: AppColors.primaryPink.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
-                                child: const Icon(Icons.medical_services_outlined, color: AppColors.primaryPink),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(equipment['name'], 
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text('${equipment['category'] ?? 'LOGAM'}', 
-                                      style: const TextStyle(color: AppColors.primaryPink, fontSize: 8, fontWeight: FontWeight.w700),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    Text('Tersedia: ${equipment['available_quantity']}', style: const TextStyle(color: Colors.black54, fontSize: 10)),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              ElevatedButton(
-                                onPressed: () => _addToCart(equipment),
-                                style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryPink, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), minimumSize: const Size(60, 36)),
-                                child: const Text('Pinjam', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                              ),
+                              Text(_selectedCategory == 'Semua' ? 'Filter' : _selectedCategory.split(' ').first, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primaryPink)),
+                              const Icon(Icons.keyboard_arrow_down, size: 16, color: AppColors.primaryPink),
                             ],
                           ),
-                        );
-                      },
+                        ),
+                      ],
                     ),
-                ],
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      height: 40,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _categories.length,
+                        itemBuilder: (context, index) {
+                          final cat = _categories[index];
+                          final isSelected = _selectedCategory == cat;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 8.0),
+                            child: FilterChip(
+                              label: Text(cat, style: TextStyle(fontSize: 10, color: isSelected ? Colors.white : Colors.black87, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                              selected: isSelected,
+                              onSelected: (selected) => setState(() => _selectedCategory = cat),
+                              selectedColor: AppColors.primaryPink,
+                              checkmarkColor: Colors.white,
+                              backgroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: isSelected ? AppColors.primaryPink : AppColors.borderLight)),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    if (_isEquipLoading) const Center(child: CustomLoader(message: 'Memuat daftar alat...'))
+                    else if (_equipments.isEmpty) const Center(child: Text('Tidak ada alat tersedia saat ini.'))
+                    else
+                      ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: _equipments.where((item) {
+                          final name = item['name']?.toString().toLowerCase() ?? '';
+                          final cat = item['category'] ?? 'ALAT LOGAM METAL';
+                          return name.contains(_searchQuery) && (_selectedCategory == 'Semua' || cat == _selectedCategory);
+                        }).length,
+                        itemBuilder: (context, index) {
+                          final filteredList = _equipments.where((item) {
+                            final name = item['name']?.toString().toLowerCase() ?? '';
+                            final cat = item['category'] ?? 'ALAT LOGAM METAL';
+                            return name.contains(_searchQuery) && (_selectedCategory == 'Semua' || cat == _selectedCategory);
+                          }).toList();
+                          final equipment = filteredList[index];
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.borderLight)),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(color: AppColors.primaryPink.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+                                  child: const Icon(Icons.medical_services_outlined, color: AppColors.primaryPink),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(equipment['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15), maxLines: 2, overflow: TextOverflow.ellipsis),
+                                      const SizedBox(height: 4),
+                                      Text('${equipment['category'] ?? 'LOGAM'}', style: const TextStyle(color: AppColors.primaryPink, fontSize: 8, fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                      Text('Tersedia: ${equipment['available_quantity']}', style: const TextStyle(color: Colors.black54, fontSize: 10)),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Builder(
+                                  builder: (context) {
+                                    final cartItemIndex = _cart.indexWhere((c) => c['id'] == equipment['id']);
+                                    if (cartItemIndex >= 0) {
+                                      final qty = _cart[cartItemIndex]['quantity'] ?? 1;
+                                      return Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          IconButton(
+                                            icon: const Icon(Icons.remove_circle_outline, color: AppColors.primaryPink, size: 22),
+                                            onPressed: () => _updateQuantity(equipment['id'], -1, equipment['available_quantity'] ?? 1),
+                                            padding: EdgeInsets.zero, constraints: const BoxConstraints(),
+                                          ),
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                                            child: Text('$qty', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                          ),
+                                          IconButton(
+                                            icon: const Icon(Icons.add_circle_outline, color: AppColors.primaryPink, size: 22),
+                                            onPressed: () => _updateQuantity(equipment['id'], 1, equipment['available_quantity'] ?? 1),
+                                            padding: EdgeInsets.zero, constraints: const BoxConstraints(),
+                                          ),
+                                        ],
+                                      );
+                                    }
+                                    return ElevatedButton(
+                                      onPressed: () => _addToCart(equipment),
+                                      style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryPink, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), minimumSize: const Size(60, 36)),
+                                      child: const Text('Pinjam', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                    );
+                                  }
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -625,16 +705,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
       children: [
         Container(
           width: double.infinity,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                AppColors.primaryPink,
-                AppColors.primaryPink.withValues(alpha: 0.8),
-              ],
-            ),
-          ),
+          decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [AppColors.primaryPink, AppColors.primaryPink.withValues(alpha: 0.8)])),
           child: SafeArea(
             bottom: false,
             child: Padding(
@@ -643,111 +714,96 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                 children: [
                   const Icon(Icons.assignment_turned_in_outlined, color: Colors.white, size: 28),
                   const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text('Alat Sedang Dipinjam', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
-                  ),
+                  const Expanded(child: Text('Alat Sedang Dipinjam', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
                 ],
               ),
             ),
           ),
         ),
         Expanded(
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (_cart.isNotEmpty) ...[
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(20, 20, 20, 10),
-                    child: Text('DAFTAR PINJAM BARU', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryPink)),
-                  ),
-                  ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: _cart.length,
-                    itemBuilder: (context, index) {
-                      final item = _cart[index];
-                      return ListTile(
-                        leading: const Icon(Icons.build_circle, color: AppColors.primaryPink),
-                        title: Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text(item['category'] ?? 'Alat'),
-                        trailing: IconButton(icon: const Icon(Icons.delete_outline, color: Colors.grey), onPressed: () => setState(() => _cart.removeAt(index))),
-                      );
-                    },
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: ElevatedButton.icon(
-                      onPressed: () => _openFormalForm(),
-                      icon: const Icon(Icons.description_outlined),
-                      label: const Text('ISI FORMULIR PEMINJAMAN'),
-                      style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryPink, foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 50), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                    ),
-                  ),
-                  const Divider(thickness: 8, color: AppColors.surfacePink),
-                ],
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(20, 20, 20, 10),
-                  child: Text('PINJAMAN SEBELUMNYA / AKTIF', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black54)),
-                ),
-                if (_isLoansLoading)
-                  const Center(child: CustomLoader(message: 'Memuat data peminjaman...'))
-                else if (_activeLoans.isEmpty)
-                  const Center(child: Padding(padding: EdgeInsets.all(40.0), child: Text('Tidak ada alat yang sedang dipinjam.')))
-                else
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: DataTable(
-                      columnSpacing: 20,
-                      headingRowColor: WidgetStateProperty.all(AppColors.surfacePink),
-                      columns: const [
-                        DataColumn(label: Text('No', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text('Nama Alat', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text('NIM', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
-                      ],
-                      rows: _activeLoans.asMap().entries.map((entry) {
-                        final index = entry.key;
-                        final loan = entry.value;
-                        final equipmentName = loan['equipments'] != null ? loan['equipments']['name'] : 'Unknown';
-                        final rawStatus = loan['status'];
-                        Color statusColor = AppColors.statusPending;
-                        String statusText = 'PENDING';
-                        if (rawStatus == 'approved') {
-                          statusColor = AppColors.statusActive;
-                          statusText = 'AKTIF';
-                        } else if (rawStatus == 'rejected') {
-                          statusColor = AppColors.statusOverdue;
-                          statusText = 'DITOLAK';
-                        }
-                        return DataRow(cells: [
-                          DataCell(Text('${index + 1}.')),
-                          DataCell(SizedBox(width: 150, child: Text(equipmentName, maxLines: 2, overflow: TextOverflow.ellipsis))),
-                          DataCell(Text(_nim)),
-                          DataCell(Row(
+          child: RefreshIndicator(
+            onRefresh: _fetchActiveLoans,
+            color: AppColors.primaryPink,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (_cart.isNotEmpty) ...[
+                    const Padding(padding: EdgeInsets.fromLTRB(20, 20, 20, 10), child: Text('DAFTAR PINJAM BARU', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryPink))),
+                    ListView.builder(
+                      shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), itemCount: _cart.length,
+                      itemBuilder: (context, index) {
+                        final item = _cart[index];
+                        return ListTile(
+                          leading: const Icon(Icons.build_circle, color: AppColors.primaryPink),
+                          title: Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text('${item['category'] ?? 'Alat'} • Jml: ${item['quantity']}'),
+                          trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(12)),
-                                child: Text(statusText, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 10)),
-                              ),
+                              IconButton(icon: const Icon(Icons.remove_circle_outline, size: 20), onPressed: () => _updateQuantity(item['id'], -1, item['available_quantity'] ?? 1)),
+                              Text('${item['quantity']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              IconButton(icon: const Icon(Icons.add_circle_outline, size: 20), onPressed: () => _updateQuantity(item['id'], 1, item['available_quantity'] ?? 1)),
                               const SizedBox(width: 8),
-                              IconButton(
-                                icon: const Icon(Icons.description_outlined, size: 18, color: AppColors.primaryPink),
-                                tooltip: 'Lihat Formulir Formal',
-                                onPressed: () {
-                                  Navigator.push(context, MaterialPageRoute(builder: (context) => FormalFormView(loanData: loan, studentName: _studentName, nim: _nim, kelas: _kelas)));
-                                },
-                              ),
+                              IconButton(icon: const Icon(Icons.delete_outline, color: Colors.grey), onPressed: () => setState(() => _cart.removeAt(index))),
                             ],
-                          )),
-                        ]);
-                      }).toList(),
+                          ),
+                        );
+                      },
                     ),
-                  ),
-                const SizedBox(height: 100),
-              ],
+                    Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: ElevatedButton.icon(
+                        onPressed: () => _openFormalForm(),
+                        icon: const Icon(Icons.description_outlined), label: const Text('ISI FORMULIR PEMINJAMAN'),
+                        style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryPink, foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 50), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                      ),
+                    ),
+                    const Divider(thickness: 8, color: AppColors.surfacePink),
+                  ],
+                  const Padding(padding: EdgeInsets.fromLTRB(20, 20, 20, 10), child: Text('PINJAMAN SEBELUMNYA / AKTIF', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black54))),
+                  if (_isLoansLoading) const Center(child: CustomLoader(message: 'Memuat data peminjaman...'))
+                  else if (_activeLoans.isEmpty) const Center(child: Padding(padding: EdgeInsets.all(40.0), child: Text('Tidak ada alat yang sedang dipinjam.')))
+                  else
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: DataTable(
+                        columnSpacing: 20, headingRowColor: WidgetStateProperty.all(AppColors.surfacePink),
+                        columns: const [
+                          DataColumn(label: Text('No', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Nama Alat', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('NIM', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
+                        ],
+                        rows: _activeLoans.asMap().entries.map((entry) {
+                          final index = entry.key; final loan = entry.value; final equipmentName = loan['equipments'] != null ? loan['equipments']['name'] : 'Unknown';
+                          final rawStatus = loan['status']; Color statusColor = AppColors.statusPending; String statusText = 'PENDING';
+                          if (rawStatus == 'approved') { statusColor = AppColors.statusActive; statusText = 'AKTIF'; }
+                          else if (rawStatus == 'rejected') { statusColor = AppColors.statusOverdue; statusText = 'DITOLAK'; }
+                          return DataRow(cells: [
+                            DataCell(Text('${index + 1}.')),
+                            DataCell(SizedBox(width: 150, child: Text(equipmentName, maxLines: 2, overflow: TextOverflow.ellipsis))),
+                            DataCell(Text(_nim)),
+                            DataCell(Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(12)), child: Text(statusText, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 10))),
+                                const SizedBox(width: 8),
+                                IconButton(
+                                  icon: const Icon(Icons.description_outlined, color: AppColors.primaryPink, size: 18),
+                                  onPressed: () {
+                                    Navigator.push(context, MaterialPageRoute(builder: (context) => FormalFormView(loanData: loan, studentName: _studentName, nim: _nim, kelas: _kelas)));
+                                  },
+                                ),
+                              ],
+                            )),
+                          ]);
+                        }).toList(),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         ),
@@ -760,6 +816,68 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
       studentName: _studentName,
       nim: _nim,
       kelas: _kelas,
+    );
+  }
+
+  Widget _buildNotificationSheet() {
+    final userId = _supabase.auth.currentUser?.id;
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Notifikasi', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                TextButton(
+                  onPressed: () async {
+                    final navigator = Navigator.of(context);
+                    await NotificationService.markAllAsRead(userId, role: 'student');
+                    if (!mounted) return;
+                    navigator.pop();
+                  },
+                  child: const Text('Tandai semua dibaca'),
+                ),
+              ],
+            ),
+          ),
+          const Divider(),
+          SizedBox(
+            height: 400,
+            child: FutureBuilder<List<Map<String, dynamic>>>(
+              future: NotificationService.getNotifications(userId, role: 'student'),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                final notes = snapshot.data!;
+                if (notes.isEmpty) return const Center(child: Text('Tidak ada notifikasi.'));
+                return ListView.builder(
+                  itemCount: notes.length,
+                  itemBuilder: (context, index) {
+                    final note = notes[index];
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: note['is_read'] ? Colors.grey[200] : AppColors.primaryPink.withValues(alpha: 0.1),
+                        child: Icon(Icons.notifications, color: note['is_read'] ? Colors.grey : AppColors.primaryPink, size: 20),
+                      ),
+                      title: Text(note['title'], style: TextStyle(fontWeight: note['is_read'] ? FontWeight.normal : FontWeight.bold, fontSize: 13)),
+                      subtitle: Text(note['message'], style: const TextStyle(fontSize: 11)),
+                      onTap: () async {
+                        final navigator = Navigator.of(context);
+                        await NotificationService.markAsRead(note['id']);
+                        if (!mounted) return;
+                        navigator.pop();
+                      },
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:simpakab/services/pdf_service.dart';
+import '../../services/pdf_service.dart';
 
 class FormalFormView extends StatelessWidget {
   final Map<String, dynamic> loanData;
@@ -336,3 +336,5 @@ class _SignatureBox extends StatelessWidget {
     );
   }
 }
+
+

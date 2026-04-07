@@ -3,14 +3,38 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'login_screen.dart';
 import 'role_router.dart';
 import '../theme/app_colors.dart';
+import 'reset_password_screen.dart';
 
-class AuthGate extends StatelessWidget {
+class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
+
+  @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  late final Stream<AuthState> _authStateStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _authStateStream = Supabase.instance.client.auth.onAuthStateChange;
+    _authStateStream.listen((data) {
+      if (data.event == AuthChangeEvent.passwordRecovery) {
+        if (mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const ResetPasswordScreen()),
+          );
+        }
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<AuthState>(
-      stream: Supabase.instance.client.auth.onAuthStateChange,
+      stream: _authStateStream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
@@ -46,3 +70,5 @@ class AuthGate extends StatelessWidget {
     );
   }
 }
+
+

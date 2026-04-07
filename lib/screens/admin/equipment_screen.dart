@@ -251,7 +251,7 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryPink, foregroundColor: Colors.white),
                   child: isSubmitting 
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                     : const Text('Simpan'),
                 ),
               ],
@@ -497,7 +497,7 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryPink, foregroundColor: Colors.white),
                   child: isSubmitting 
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                     : const Text('Simpan'),
                 ),
               ],
@@ -559,8 +559,8 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      Text(item['name'], textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                      Text(item['category'] ?? '-', style: const TextStyle(fontSize: 8, color: AppColors.textSecondary)),
+                      // Text removed
+                      // Category removed
                     ],
                   ),
                 ),
@@ -590,7 +590,7 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
                               height: 60,
                             ),
                             pw.SizedBox(height: 4),
-                            pw.Text(item['name'], textAlign: pw.TextAlign.center, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                            // PDF Text removed
                           ],
                         ),
                       );
@@ -634,58 +634,67 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Wrap(
-                                  alignment: WrapAlignment.spaceBetween,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  spacing: 16,
-                                  runSpacing: 12,
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text('Equipment Inventory', style: AppTextStyles.heading1),
-                                    Wrap(
-                                      spacing: 8,
-                                      runSpacing: 8,
-                                      crossAxisAlignment: WrapCrossAlignment.center,
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                       children: [
-                                        SizedBox(
-                                          width: isDesktop ? 250 : MediaQuery.of(context).size.width * 0.4,
+                                        Expanded(child: Text('Equipment Inventory', style: AppTextStyles.heading1)),
+                                        const SizedBox(width: 8),
+                                        ElevatedButton.icon(
+                                          onPressed: _showAddEquipmentDialog,
+                                          icon: const Icon(Icons.add, size: 18),
+                                          label: const Text('Add', style: TextStyle(fontSize: 12)),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: AppColors.statusActive,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      crossAxisAlignment: CrossAxisAlignment.center,
+                                      children: [
+                                        Expanded(
                                           child: TextField(
                                             controller: _searchController,
                                             style: const TextStyle(fontSize: 12),
                                             decoration: InputDecoration(
-                                              hintText: 'Cari...',
+                                              hintText: 'Cari alat...',
                                               prefixIcon: const Icon(Icons.search, color: AppColors.primaryPink, size: 16),
-                                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                              filled: true,
+                                              fillColor: Colors.white,
+                                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.borderLight)),
+                                              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.borderLight)),
                                             ),
                                             onChanged: (val) => setState(() => _searchQuery = val.toLowerCase()),
                                           ),
                                         ),
+                                        const SizedBox(width: 8),
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 8),
+                                          height: 48,
                                           decoration: BoxDecoration(
-                                            borderRadius: BorderRadius.circular(10),
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(12),
                                             border: Border.all(color: AppColors.borderLight),
                                           ),
                                           child: DropdownButton<String>(
                                             value: _selectedCategory,
                                             underline: const SizedBox(),
                                             icon: const Icon(Icons.filter_list, size: 16, color: AppColors.primaryPink),
-                                            items: ['Semua Kategori', ..._categories].map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 10)))).toList(),
+                                            items: ['Semua Kategori', ..._categories].map((c) => DropdownMenuItem(value: c, child: Text(c.split(' ').first, style: const TextStyle(fontSize: 11)))).toList(),
                                             onChanged: (val) => setState(() => _selectedCategory = val!),
                                           ),
                                         ),
                                       ],
                                     ),
-                                    ElevatedButton.icon(
-                                      onPressed: _showAddEquipmentDialog,
-                                      icon: const Icon(Icons.add, size: 18),
-                                      label: const Text('Add Equipment', style: TextStyle(fontSize: 12)),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: AppColors.statusActive,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                      ),
-                                    )
                                   ],
                                 ),
                                 const SizedBox(height: 24),
@@ -773,3 +782,9 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
     );
   }
 }
+
+
+
+
+
+
