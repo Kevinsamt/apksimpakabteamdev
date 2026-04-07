@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../theme/app_colors.dart';
 import '../theme/text_styles.dart';
 import '../services/notification_service.dart';
+import 'package:audioplayers/audioplayers.dart';
 import '../screens/admin/return_scanner_screen.dart';
 
 class HeaderWidget extends StatefulWidget {
@@ -17,6 +18,8 @@ class _HeaderWidgetState extends State<HeaderWidget> {
   final _supabase = Supabase.instance.client;
   String? _role;
   String? _userId;
+  int _lastNotificationCount = 0;
+  final AudioPlayer _audioPlayer = AudioPlayer();
 
   @override
   void initState() {
@@ -105,6 +108,20 @@ class _HeaderWidgetState extends State<HeaderWidget> {
     );
   }
 
+  @override
+  void dispose() {
+    _audioPlayer.dispose();
+    super.dispose();
+  }
+
+  void _playSound() async {
+    try {
+      await _audioPlayer.play(AssetSource('sounds/notifsimpakab.mp3'));
+    } catch (e) {
+      debugPrint('Error playing sound: $e');
+    }
+  }
+
   void _openScanner() {
     Navigator.push(
       context,
@@ -170,6 +187,13 @@ class _HeaderWidgetState extends State<HeaderWidget> {
                 stream: NotificationService.getUnreadCountStream(_userId, role: _role),
                 builder: (context, snapshot) {
                   final count = snapshot.data ?? 0;
+                  
+                  // BUNYIKAN SUARA: Jika jumlah notif baru bertambah (misal dari 2 jadi 3)
+                  if (count > _lastNotificationCount) {
+                    _playSound();
+                  }
+                  _lastNotificationCount = count;
+
                   return Stack(
                     children: [
                       IconButton(

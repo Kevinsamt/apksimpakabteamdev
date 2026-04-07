@@ -42,6 +42,7 @@ dependencies:
   qr_flutter: ^4.1.0
   flutter_markdown: ^0.7.3
   intl: ^0.20.2
+  audioplayers: ^6.1.0
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
@@ -83,6 +84,7 @@ flutter:
     - assets/images/
     - assets/images/logo_student.png
     - assets/images/midwifery_icon_loading.png
+    - assets/sounds/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

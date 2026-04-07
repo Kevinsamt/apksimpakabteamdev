@@ -21,11 +21,19 @@ class _LoansScreenState extends State<LoansScreen> {
   List<Map<String, dynamic>> _loans = [];
   bool _isLoading = true;
   bool _showHistory = false;
+  String _searchQuery = '';
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _fetchLoans();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _fetchLoans() async {
@@ -291,6 +299,26 @@ class _LoansScreenState extends State<LoansScreen> {
                                     ),
                                   ],
                                 ),
+                                const SizedBox(height: 20),
+                                // Search Bar
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.surfaceWhite,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: AppColors.borderLight),
+                                  ),
+                                  child: TextField(
+                                    controller: _searchController,
+                                    onChanged: (value) => setState(() => _searchQuery = value.toLowerCase()),
+                                    decoration: const InputDecoration(
+                                      hintText: 'Cari nama peminjam atau tanggal (contoh: Apr 07)...',
+                                      hintStyle: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+                                      border: InputBorder.none,
+                                      icon: Icon(Icons.search, color: AppColors.primaryPink),
+                                    ),
+                                  ),
+                                ),
                                 const SizedBox(height: 24),
                                 Container(
                                   width: double.infinity,
@@ -304,13 +332,25 @@ class _LoansScreenState extends State<LoansScreen> {
                                     builder: (context) {
                                       final filteredLoans = _loans.where((loan) {
                                         final status = loan['status'] ?? 'pending';
-                                        return _showHistory ? status == 'returned' : status != 'returned';
+                                        final borrowerName = (loan['profiles']?['full_name'] ?? '').toString().toLowerCase();
+                                        final loanDate = _formatDate(loan['borrow_date']).toLowerCase();
+                                        
+                                        // Filter berdasarkan Tab (Aktif/Riwayat)
+                                        final matchesTab = _showHistory ? status == 'returned' : status != 'returned';
+                                        
+                                        // Filter berdasarkan Search Query
+                                        final matchesSearch = borrowerName.contains(_searchQuery) || loanDate.contains(_searchQuery);
+                                        
+                                        return matchesTab && matchesSearch;
                                       }).toList();
  
                                       if (filteredLoans.isEmpty) {
                                         return Center(child: Padding(
                                           padding: const EdgeInsets.all(32.0),
-                                          child: Text(_showHistory ? 'Belum ada riwayat pengembalian.' : 'Belum ada peminjaman aktif.', style: const TextStyle(color: AppColors.textSecondary)),
+                                          child: Text(_searchQuery.isNotEmpty 
+                                            ? 'Hasil pencarian "$_searchQuery" tidak ditemukan.' 
+                                            : (_showHistory ? 'Belum ada riwayat pengembalian.' : 'Belum ada peminjaman aktif.'), 
+                                            style: const TextStyle(color: AppColors.textSecondary)),
                                         ));
                                       }
  

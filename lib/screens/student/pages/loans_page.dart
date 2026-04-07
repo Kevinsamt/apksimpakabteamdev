@@ -108,7 +108,13 @@ class _LoansPageState extends State<LoansPage> {
                       final isSelected = _selectedLoanIds.contains(loan['id']);
                       return DataRow(cells: [
                         DataCell(isSelectable ? Checkbox(value: isSelected, activeColor: AppColors.primaryPink, onChanged: (v) {
-                          setState(() { if (v!) _selectedLoanIds.add(loan['id']); else _selectedLoanIds.remove(loan['id']); });
+                          setState(() { 
+                            if (v == true) {
+                              _selectedLoanIds.add(loan['id']); 
+                            } else {
+                              _selectedLoanIds.remove(loan['id']); 
+                            }
+                          });
                         }) : const Icon(Icons.lock_outline, size: 16, color: Colors.grey)),
                         DataCell(SizedBox(width: 150, child: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis))),
                         DataCell(Text(status.toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold))),
