@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
+import '../theme/text_styles.dart';
 import '../widgets/sidebar.dart';
 import '../widgets/header.dart';
 import '../widgets/inventory_chart.dart';
@@ -11,8 +12,7 @@ class DashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Check if the screen is large (desktop/tablet) or small (mobile)
-    final isDesktop = MediaQuery.of(context).size.width >= 900;
+    final isDesktop = MediaQuery.of(context).size.width >= 1000;
 
     return Scaffold(
       backgroundColor: AppColors.backgroundWhite,
@@ -20,109 +20,172 @@ class DashboardScreen extends StatelessWidget {
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // If desktop, show side bar permanently
           if (isDesktop) const Sidebar(),
           
-          // Main content area
           Expanded(
-            child: Column(
-              children: [
-                const HeaderWidget(
-                  onMenuPressed: null,
-                ),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: EdgeInsets.all(isDesktop ? 24.0 : 16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 24),
-                        // Main Dashboard Widgets conditionally rendered
-                        if (isDesktop)
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Left Column (Chart)
-                              Expanded(
-                                flex: 2,
-                                child: Container(
-                                  padding: const EdgeInsets.all(20),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.surfaceWhite,
-                                    borderRadius: BorderRadius.circular(20),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: AppColors.primaryPink.withValues(alpha: 0.05),
-                                        blurRadius: 24,
-                                        offset: const Offset(0, 8),
-                                      ),
-                                    ],
+            child: SafeArea(
+              child: Column(
+                children: [
+                  const HeaderWidget(onMenuPressed: null),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      padding: EdgeInsets.fromLTRB(
+                        isDesktop ? 32 : 16, 
+                        isDesktop ? 32 : 16, 
+                        isDesktop ? 32 : 16, 
+                        80
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // ✨ Welcome Header
+                          Text('Halo, Admin! 👋', style: AppTextStyles.heading1),
+                          Text('Berikut adalah ringkasan inventaris Anda hari ini.', style: AppTextStyles.bodyText),
+                          const SizedBox(height: 32),
+
+                          // 💎 Summary Cards Row
+                          LayoutBuilder(
+                            builder: (context, constraints) {
+                              int crossAxisCount = constraints.maxWidth > 1200 ? 4 : (constraints.maxWidth > 700 ? 2 : 1);
+                              return GridView.count(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                crossAxisCount: crossAxisCount,
+                                crossAxisSpacing: 20,
+                                mainAxisSpacing: 20,
+                                childAspectRatio: 2.2,
+                                children: [
+                                  _buildSummaryCard(
+                                    context,
+                                    title: 'Total Barang',
+                                    value: '124',
+                                    icon: Icons.inventory_2_rounded,
+                                    color: AppColors.primaryPink,
+                                    trend: '+5%',
                                   ),
-                                  child: const InventoryChart(),
-                                ),
-                              ),
-                              const SizedBox(width: 24),
-                              // Right Column (Active Loans)
-                              Expanded(
-                                flex: 3,
-                                child: Container(
-                                  padding: const EdgeInsets.all(20),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.surfaceWhite,
-                                    borderRadius: BorderRadius.circular(20),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: AppColors.primaryPink.withValues(alpha: 0.05),
-                                        blurRadius: 24,
-                                        offset: const Offset(0, 8),
-                                      ),
-                                    ],
+                                  _buildSummaryCard(
+                                    context,
+                                    title: 'Barang Rusak',
+                                    value: '12',
+                                    icon: Icons.personal_injury_rounded,
+                                    color: AppColors.statusOverdue,
+                                    trend: '-2%',
                                   ),
-                                  child: const ActiveLoansList(),
-                                ),
-                              )
-                            ],
-                          )
-                        else
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(20),
-                                decoration: BoxDecoration(
-                                  color: AppColors.surfaceWhite,
-                                  borderRadius: BorderRadius.circular(20),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: AppColors.primaryPink.withValues(alpha: 0.05),
-                                      blurRadius: 24,
-                                      offset: const Offset(0, 8),
-                                    ),
-                                  ],
-                                ),
-                                child: const InventoryChart(),
-                              ),
-                              const SizedBox(height: 16),
-                              Container(
-                                padding: const EdgeInsets.all(20),
-                                decoration: BoxDecoration(
-                                  color: AppColors.surfaceWhite,
-                                  borderRadius: BorderRadius.circular(20),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: AppColors.primaryPink.withValues(alpha: 0.05),
-                                      blurRadius: 24,
-                                      offset: const Offset(0, 8),
-                                    ),
-                                  ],
-                                ),
-                                child: const ActiveLoansList(),
-                              ),
-                            ],
+                                  _buildSummaryCard(
+                                    context,
+                                    title: 'Peminjaman Aktif',
+                                    value: '45',
+                                    icon: Icons.shopping_bag_rounded,
+                                    color: AppColors.statusActive,
+                                    trend: '+12%',
+                                  ),
+                                  _buildSummaryCard(
+                                    context,
+                                    title: 'Limbah Medis',
+                                    value: '12 KG',
+                                    icon: Icons.delete_sweep_rounded,
+                                    color: AppColors.statusPending,
+                                    trend: 'Monitor',
+                                  ),
+                                ],
+                              );
+                            },
                           ),
-                      ],
+
+                          const SizedBox(height: 32),
+
+                          // 🚀 Main Insights Area
+                          if (isDesktop)
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  flex: 2,
+                                  child: _buildContentBlock(
+                                    title: 'Statistik Stok',
+                                    child: const InventoryChart(),
+                                  ),
+                                ),
+                                const SizedBox(width: 24),
+                                Expanded(
+                                  flex: 3,
+                                  child: _buildContentBlock(
+                                    title: 'Aktivitas Peminjaman',
+                                    child: const ActiveLoansList(),
+                                  ),
+                                )
+                              ],
+                            )
+                          else ...[
+                            _buildContentBlock(
+                              title: 'Statistik Stok',
+                              child: const InventoryChart(),
+                            ),
+                            const SizedBox(height: 24),
+                            _buildContentBlock(
+                              title: 'Aktivitas Peminjaman',
+                              child: const ActiveLoansList(),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryCard(BuildContext context, {
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color color,
+    required String trend,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: AppColors.cardShadow,
+        border: Border.all(color: color.withValues(alpha: 0.1), width: 1.5),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(icon, color: color, size: 28),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(title, style: AppTextStyles.label),
+                Row(
+                  children: [
+                    Text(value, style: AppTextStyles.heading2.copyWith(fontSize: 24)),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(trend, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -131,6 +194,29 @@ class DashboardScreen extends StatelessWidget {
       ),
     );
   }
+
+  Widget _buildContentBlock({required String title, required Widget child}) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(32),
+        boxShadow: AppColors.cardShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(title, style: AppTextStyles.heading2),
+              IconButton(onPressed: () {}, icon: const Icon(Icons.more_horiz)),
+            ],
+          ),
+          const SizedBox(height: 16),
+          child,
+        ],
+      ),
+    );
+  }
 }
-
-

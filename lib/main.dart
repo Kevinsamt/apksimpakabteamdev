@@ -10,6 +10,8 @@ import 'screens/admin/equipment_screen.dart';
 import 'screens/admin/loans_screen.dart';
 import 'screens/admin/users_screen.dart';
 import 'screens/admin/reports_screen.dart';
+import 'screens/admin/medical_waste_screen.dart';
+import 'screens/dev/dev_dashboard_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -49,6 +51,8 @@ class MyApp extends StatelessWidget {
         '/loans': (context) => const LoansScreen(),
         '/users': (context) => const UsersScreen(),
         '/reports': (context) => const ReportsScreen(),
+        '/waste': (context) => const MedicalWasteScreen(),
+        '/dev_dashboard': (context) => const DevDashboardScreen(),
       },
     );
   }

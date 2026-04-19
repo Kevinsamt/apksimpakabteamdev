@@ -24,6 +24,13 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
   bool _isLoading = false;
   final ScrollController _scrollController = ScrollController();
 
+  final List<String> _quickQueries = [
+    'Cara pinjam alat?',
+    'Stok Tensimeter',
+    'Limbah Medis apa?',
+    'Jam buka Lab',
+  ];
+
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
@@ -36,9 +43,11 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
     });
   }
 
-  Future<void> _sendMessage() async {
-    final query = _messageController.text.trim();
+  Future<void> _sendMessage({String? customQuery}) async {
+    final query = customQuery ?? _messageController.text.trim();
     if (query.isEmpty) return;
+
+    if (customQuery == null) _messageController.clear();
 
     setState(() {
       _messages.add({
@@ -47,7 +56,6 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
         'time': DateTime.now(),
       });
       _isLoading = true;
-      _messageController.clear();
     });
     _scrollToBottom();
 
@@ -60,7 +68,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
       final data = response.data as Map<String, dynamic>?;
       String aiResponse = data != null && data['answer'] != null 
           ? data['answer'] 
-          : 'Maaf, saya tidak mengerti maksud Anda.';
+          : 'Maaf, saya sedang mempelajari data terbaru. Silakan tanya kembali beberapa saat lagi.';
 
       if (mounted) {
         setState(() {
@@ -77,7 +85,7 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
       if (mounted) {
         setState(() {
           _messages.add({
-            'text': '⚠️ Maaf, terjadi gangguan koneksi ke server AI. Pastikan internet Anda stabil.',
+            'text': '⚠️ Maaf Sekali Wak, koneksi AI sedang sibuk. Mohon cek internet Anda ya.',
             'isUser': false,
             'time': DateTime.now(),
           });
@@ -91,191 +99,173 @@ class _AiAssistantScreenState extends State<AiAssistantScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.backgroundWhite,
+      appBar: _buildAppBar(),
+      body: Column(
+        children: [
+          Expanded(
+            child: ListView.builder(
+              controller: _scrollController,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+              itemCount: _messages.length,
+              itemBuilder: (context, index) => _buildChatBubble(_messages[index]),
+            ),
+          ),
+          if (_isLoading) _buildLoadingIndicator(),
+          _buildQuickActions(),
+          _buildInputArea(),
+        ],
+      ),
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar() {
+    return AppBar(
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0.5,
-        centerTitle: false,
-        title: Row(
-          children: [
-            CircleAvatar(
-              backgroundColor: AppColors.primaryPink.withValues(alpha: 0.1),
-              child: const Icon(Icons.bolt_rounded, color: AppColors.primaryPink),
-            ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('AI Assistant', style: AppTextStyles.bodyTextStrong.copyWith(fontSize: 16)),
-                Row(
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle),
-                    ),
-                    const SizedBox(width: 4),
-                    Text('Selalu Aktif', style: AppTextStyles.label.copyWith(color: Colors.green)),
-                  ],
-                ),
+      elevation: 0,
+      centerTitle: false,
+      title: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: AppColors.surfacePink, borderRadius: BorderRadius.circular(12)),
+            child: const Icon(Icons.auto_awesome_rounded, color: AppColors.primaryPink, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('SIMPAKAB AI', style: AppTextStyles.bodyTextStrong),
+              Row(
+                children: [
+                  Container(width: 6, height: 6, decoration: const BoxDecoration(color: AppColors.statusActive, shape: BoxShape.circle)),
+                  const SizedBox(width: 4),
+                  Text('Active Now', style: AppTextStyles.label.copyWith(fontSize: 10, color: AppColors.statusActive)),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+      leading: IconButton(
+        icon: const Icon(Icons.arrow_back_ios_new, color: AppColors.textPrimary, size: 20),
+        onPressed: () => Navigator.pop(context),
+      ),
+    );
+  }
+
+  Widget _buildChatBubble(Map<String, dynamic> msg) {
+    bool isUser = msg['isUser'] == true;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Column(
+        crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (!isUser) ...[
+                CircleAvatar(radius: 14, backgroundColor: AppColors.surfacePink, child: const Icon(Icons.smart_toy_rounded, size: 14, color: AppColors.primaryPink)),
+                const SizedBox(width: 8),
               ],
-            ),
-          ],
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: AppColors.textPrimary, size: 20),
-          onPressed: () => Navigator.pop(context),
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: isUser ? AppColors.primaryPink : Colors.white,
+                    borderRadius: BorderRadius.only(
+                      topLeft: const Radius.circular(20),
+                      topRight: const Radius.circular(20),
+                      bottomLeft: Radius.circular(isUser ? 20 : 4),
+                      bottomRight: Radius.circular(isUser ? 4 : 20),
+                    ),
+                    boxShadow: AppColors.cardShadow,
+                  ),
+                  child: MarkdownBody(
+                    data: msg['text'],
+                    styleSheet: MarkdownStyleSheet(
+                      p: AppTextStyles.bodyText.copyWith(color: isUser ? Colors.white : AppColors.textPrimary),
+                      strong: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Padding(
+            padding: EdgeInsets.only(left: isUser ? 0 : 40, right: isUser ? 8 : 0),
+            child: Text(DateFormat('HH:mm').format(msg['time']), style: AppTextStyles.label.copyWith(fontSize: 9)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickActions() {
+    return Container(
+      height: 45,
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: _quickQueries.length,
+        itemBuilder: (context, index) => Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: ActionChip(
+            label: Text(_quickQueries[index], style: const TextStyle(fontSize: 11)),
+            onPressed: () => _sendMessage(customQuery: _quickQueries[index]),
+            backgroundColor: Colors.white,
+            side: const BorderSide(color: AppColors.primaryPink, width: 0.5),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          ),
         ),
       ),
-      body: Container(
-        decoration: BoxDecoration(
-          color: AppColors.primaryPink.withValues(alpha: 0.02),
-        ),
-        child: Column(
-          children: [
-            Expanded(
-              child: ListView.builder(
-                controller: _scrollController,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-                itemCount: _messages.length,
-                itemBuilder: (context, index) {
-                  final msg = _messages[index];
-                  final bool isUser = msg['isUser'] == true;
-                  final DateTime time = msg['time'];
+    );
+  }
 
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 20),
-                    child: Column(
-                      crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            if (!isUser) ...[
-                              CircleAvatar(
-                                radius: 15,
-                                backgroundColor: AppColors.primaryPink.withValues(alpha: 0.1),
-                                child: const Icon(Icons.bolt_rounded, size: 15, color: AppColors.primaryPink),
-                              ),
-                              const SizedBox(width: 8),
-                            ],
-                            Flexible(
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                decoration: BoxDecoration(
-                                  color: isUser ? AppColors.primaryPink : Colors.white,
-                                  borderRadius: BorderRadius.only(
-                                    topLeft: const Radius.circular(20),
-                                    topRight: const Radius.circular(20),
-                                    bottomLeft: Radius.circular(isUser ? 20 : 4),
-                                    bottomRight: Radius.circular(isUser ? 4 : 20),
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.05),
-                                      blurRadius: 10,
-                                      offset: const Offset(0, 2),
-                                    )
-                                  ],
-                                ),
-                                child: MarkdownBody(
-                                  data: msg['text'],
-                                  styleSheet: MarkdownStyleSheet(
-                                    p: AppTextStyles.bodyText.copyWith(
-                                      color: isUser ? Colors.white : AppColors.textPrimary,
-                                      fontSize: 15,
-                                    ),
-                                    strong: const TextStyle(fontWeight: FontWeight.bold),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            if (isUser) const SizedBox(width: 40), // Spasi agar tidak mentok kiri
-                          ],
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4, left: 40, right: 8),
-                          child: Text(
-                            DateFormat('HH:mm').format(time),
-                            style: AppTextStyles.label.copyWith(fontSize: 10, color: Colors.grey),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
+  Widget _buildLoadingIndicator() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Row(
+        children: [
+          const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryPink)),
+          const SizedBox(width: 12),
+          Text('Asisten sedang menganalisis...', style: AppTextStyles.label.copyWith(fontStyle: FontStyle.italic)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInputArea() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 20, offset: const Offset(0, -4))],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: BoxDecoration(color: AppColors.backgroundWhite, borderRadius: BorderRadius.circular(24)),
+              child: TextField(
+                controller: _messageController,
+                decoration: const InputDecoration(hintText: 'Tanyakan sesuatu...', border: InputBorder.none, hintStyle: TextStyle(fontSize: 14)),
+                onSubmitted: (_) => _sendMessage(),
               ),
             ),
-            if (_isLoading)
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    const SizedBox(
-                      width: 12,
-                      height: 12,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryPink),
-                    ),
-                    const SizedBox(width: 8),
-                    Text('Asisten sedang mengetik...', style: AppTextStyles.label.copyWith(fontStyle: FontStyle.italic)),
-                  ],
-                ),
-              ),
-            // Input Area
-            Container(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 20, offset: const Offset(0, -5))
-                ],
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: AppColors.backgroundWhite,
-                        borderRadius: BorderRadius.circular(25),
-                      ),
-                      child: TextField(
-                        controller: _messageController,
-                        style: AppTextStyles.bodyText,
-                        decoration: const InputDecoration(
-                          hintText: 'Tulis pesan Anda...',
-                          hintStyle: TextStyle(color: Colors.grey),
-                          contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                          border: InputBorder.none,
-                        ),
-                        onSubmitted: (_) => _sendMessage(),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  GestureDetector(
-                    onTap: _sendMessage,
-                    child: Container(
-                      height: 48,
-                      width: 48,
-                      decoration: const BoxDecoration(
-                        color: AppColors.primaryPink,
-                        shape: BoxShape.circle,
-                        gradient: LinearGradient(
-                          colors: [AppColors.primaryPink, AppColors.darkPink],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                      ),
-                      child: const Icon(Icons.send_rounded, color: Colors.white, size: 20),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 12),
+          CircleAvatar(
+            radius: 25,
+            backgroundColor: AppColors.primaryPink,
+            child: IconButton(icon: const Icon(Icons.send_rounded, color: Colors.white, size: 20), onPressed: () => _sendMessage()),
+          ),
+        ],
       ),
     );
   }

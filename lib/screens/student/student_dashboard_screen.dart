@@ -9,6 +9,7 @@ import 'formal_form_view.dart';
 import 'pages/history_page.dart';
 import 'ai_assistant_screen.dart';
 import '../../services/notification_service.dart';
+import '../../theme/text_styles.dart';
 
 class StudentDashboardScreen extends StatefulWidget {
   const StudentDashboardScreen({super.key});
@@ -194,28 +195,124 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
     }
   }
 
+  Future<void> _showFeedbackDialog() async {
+    final controller = TextEditingController();
+    bool isSubmitting = false;
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setStateDialog) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Lapor Keluhan / Saran 📝', style: TextStyle(fontWeight: FontWeight.bold)),
+          content: TextField(
+            controller: controller,
+            maxLines: 5,
+            decoration: InputDecoration(
+              hintText: 'Tuliskan keluhan atau saran Anda di sini...',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+            ElevatedButton(
+              onPressed: isSubmitting ? null : () async {
+                if (controller.text.isEmpty) return;
+                setStateDialog(() => isSubmitting = true);
+                try {
+                  await _supabase.from('feedback').insert({
+                    'user_id': _supabase.auth.currentUser?.id,
+                    'user_email': _supabase.auth.currentUser?.email,
+                    'message': controller.text,
+                    'created_at': DateTime.now().toIso8601String(),
+                  });
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Terima kasih! Laporan Anda sudah terkirim ke Developer. 🙏')));
+                  }
+                } catch (e) {
+                  debugPrint('Error feedback: $e');
+                  setStateDialog(() => isSubmitting = false);
+                }
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryPink, foregroundColor: Colors.white),
+              child: isSubmitting ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Text('Kirim'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.backgroundWhite,
-      body: _isLoading 
-          ? const CustomLoader(message: 'Memuat data mahasiswa...')
-          : _selectedIndex == 0 
-              ? _buildHome() 
-              : _selectedIndex == 1 
-                  ? _buildAlat() 
-                  : _selectedIndex == 2 
-                      ? _buildPeminjaman() 
-                      : _buildKembalian(),
+      body: SafeArea(
+        child: _isLoading 
+            ? const CustomLoader(message: 'Memuat data mahasiswa...')
+            : _selectedIndex == 0 
+                ? _buildHome() 
+                : _selectedIndex == 1 
+                    ? _buildAlat() 
+                    : _selectedIndex == 2 
+                        ? _buildPeminjaman() 
+                        : _buildKembalian(),
+      ),
       floatingActionButton: _selectedIndex == 0
-          ? FloatingActionButton.extended(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const AiAssistantScreen()),
-              ),
+          ? FloatingActionButton(
+              onPressed: () {
+                showModalBottomSheet(
+                  context: context,
+                  backgroundColor: Colors.white,
+                  shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+                  builder: (context) => SafeArea(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('Butuh Bantuan? 🔱', style: AppTextStyles.heading2),
+                          const SizedBox(height: 24),
+                          ListTile(
+                            leading: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(color: AppColors.primaryPink.withValues(alpha: 0.1), shape: BoxShape.circle),
+                              child: const Icon(Icons.bolt_rounded, color: AppColors.primaryPink),
+                            ),
+                            title: const Text('Tanya AI Assistant', style: TextStyle(fontWeight: FontWeight.bold)),
+                            subtitle: const Text('Tanya seputar alat kebidanan'),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () {
+                              Navigator.pop(context);
+                              Navigator.push(context, MaterialPageRoute(builder: (context) => const AiAssistantScreen()));
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                          ListTile(
+                            leading: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(color: Colors.blue.withValues(alpha: 0.1), shape: BoxShape.circle),
+                              child: const Icon(Icons.chat_bubble_outline, color: Colors.blue),
+                            ),
+                            title: const Text('Lapor Keluhan / Saran', style: TextStyle(fontWeight: FontWeight.bold)),
+                            subtitle: const Text('Kirim pesan ke Developer'),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () {
+                              Navigator.pop(context);
+                              _showFeedbackDialog();
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
               backgroundColor: AppColors.primaryPink,
-              icon: const Icon(Icons.bolt_rounded, color: Colors.white),
-              label: const Text('TANYA AI', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              child: const Icon(Icons.help_outline, color: Colors.white),
             )
           : (_selectedIndex == 1 && _cart.isNotEmpty
               ? FloatingActionButton.extended(
@@ -821,39 +918,40 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
 
   Widget _buildNotificationSheet() {
     final userId = _supabase.auth.currentUser?.id;
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Notifikasi', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                TextButton(
-                  onPressed: () async {
-                    final navigator = Navigator.of(context);
-                    await NotificationService.markAllAsRead(userId, role: 'student');
-                    if (!mounted) return;
-                    navigator.pop();
-                  },
-                  child: const Text('Tandai semua dibaca'),
-                ),
-              ],
+    return SingleChildScrollView(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Notifikasi', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  TextButton(
+                    onPressed: () async {
+                      final navigator = Navigator.of(context);
+                      await NotificationService.markAllAsRead(userId, role: 'student');
+                      if (!mounted) return;
+                      navigator.pop();
+                    },
+                    child: const Text('Tandai semua dibaca'),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const Divider(),
-          SizedBox(
-            height: 400,
-            child: FutureBuilder<List<Map<String, dynamic>>>(
+            const Divider(),
+            FutureBuilder<List<Map<String, dynamic>>>(
               future: NotificationService.getNotifications(userId, role: 'student'),
               builder: (context, snapshot) {
-                if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                if (!snapshot.hasData) return const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()));
                 final notes = snapshot.data!;
-                if (notes.isEmpty) return const Center(child: Text('Tidak ada notifikasi.'));
+                if (notes.isEmpty) return const Center(child: Padding(padding: EdgeInsets.all(20), child: Text('Tidak ada notifikasi.')));
                 return ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
                   itemCount: notes.length,
                   itemBuilder: (context, index) {
                     final note = notes[index];
@@ -875,8 +973,8 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                 );
               },
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

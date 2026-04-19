@@ -1,28 +1,44 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
-  // Core UI Theme
-  static const Color primaryPink = Color(0xFFE91E63); // Vibrant Pink (Base)
-  static const Color darkPink = Color(0xFFC2185B); // Darker shade for text/contrast
-  static const Color lightPink = Color(0xFFF8BBD0); // Soft pastel pink for highlights
-  static const Color surfacePink = Color(0xFFFDF2F8); // Very light pink for backgrounds
+  // 💖 Core Pink Palette (Premium HSL-Tailored)
+  static const Color primaryPink = Color(0xFFE91E63); 
+  static const Color darkPink = Color(0xFF880E4F); 
+  static const Color gradientStart = Color(0xFFEC407A); // Vibrant Pink
+  static const Color gradientEnd = Color(0xFFAD1457);   // Deep Rose
   
-  // Base Colors
-  static const Color backgroundWhite = Color(0xFFFDF2F8); // Replaced with surfacePink logic
+  // 🌬️ Surface & Glassmorphism
+  static const Color surfacePink = Color(0xFFFFF1F5); // Ultra Light Pink
+  static const Color lightPink = Color(0xFFF8BBD0); // 🏛️ Pulihkan buat kodingan lama
+  static const Color borderLight = Color(0xFFFCE4EC); // 🏛️ Pulihkan buat kodingan lama
+  static const Color backgroundWhite = Color(0xFFFAFAFB); // Crisp Modern White
   static const Color surfaceWhite = Colors.white;
-  static const Color textPrimary = Color(0xFF4A148C); // Deep purple-pink for strong contrast
-  static const Color textSecondary = Color(0xFF880E4F); // Muted dark pink for secondary text
-  static const Color borderLight = Color(0xFFFCE4EC); // Soft pink border
+  static const Color glassWhite = Color(0xCCFFFFFF); // Semi-Transparent for glass effect
   
-  // Status Colors (Adapted to harmonize with pink)
-  static const Color statusActive = Color(0xFF4CAF50); // Keep green for success/active
-  static const Color statusOverdue = Color(0xFFD32F2F); // Red for overdue
-  static const Color statusPending = Color(0xFFFFA000); // Amber for pending
+  // 🏛️ Typography
+  static const Color textPrimary = Color(0xFF2D0C21); // Almost Black-Pink for elegance
+  static const Color textSecondary = Color(0xFF6A1B4D); // Deep Muted Pink
+  static const Color textMuted = Color(0xFFAD8B9D);    // Soft Gray-Pink
   
-  // Chart Gradients & Colors
-  static const Color chartPurple = Color(0xFF9C27B0);
-  static const Color chartGold = Color(0xFFFFB300);
-  static const Color chartPeach = Color(0xFFFF7043);
+  // 🛡️ Status (Harmonized)
+  static const Color statusActive = Color(0xFF2ECC71); 
+  static const Color statusOverdue = Color(0xFFFF4757); 
+  static const Color statusPending = Color(0xFFFFA502); 
+  
+  // 🐚 Shadow Constants (Soft & Modern)
+  static List<BoxShadow> premiumShadow = [
+    BoxShadow(
+      color: primaryPink.withValues(alpha: 0.08),
+      blurRadius: 24,
+      offset: const Offset(0, 8),
+    ),
+  ];
+
+  static List<BoxShadow> cardShadow = [
+    BoxShadow(
+      color: Colors.black.withValues(alpha: 0.04),
+      blurRadius: 16,
+      offset: const Offset(0, 4),
+    ),
+  ];
 }
-
-
